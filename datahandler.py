@@ -71,7 +71,7 @@ class DataHandler(QObject):
             if self.get_events_count(roi_id=roi) > 0:
                 events = self.get_roi_events(roi_id=roi)
                 for key in events:
-                    event = events[key]
+                    event = events[key].copy()
                     # Remove the pen information
                     del event['fit_rise_time']
                     del event['fit_decay_time']
@@ -82,6 +82,9 @@ class DataHandler(QObject):
                     del event['hover_pen_color']
                     event['roi'] = roi
                     event['event'] = key
+                    event['f_base_line'] = self.data[roi][self.data_traces_key]['fbs']
+                    event['fbs_percentile'] = self.fbs_per
+
                     if self.meta_data['meta_data'] is not None:
                         event.update(self.meta_data['meta_data'])
                     all_events.append(event)

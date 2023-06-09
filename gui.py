@@ -89,6 +89,11 @@ class MainWindow(QMainWindow):
         # self.shortcut_toolbar_z_score_action = QShortcut(QKeySequence('Z'), self)
 
         self.toolbar.addSeparator()
+        # Show Baseline
+        self.toolbar_fbs_trace_action = QAction("Show Baseline", self)
+        self.toolbar_fbs_trace_action.setToolTip("Show Baseline")
+        self.toolbar.addAction(self.toolbar_fbs_trace_action)
+        self.toolbar.addSeparator()
 
         # Filter Button
         self.toolbar_filter_action = QAction("Turn Filter ON", self)

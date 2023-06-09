@@ -10,6 +10,7 @@ from datahandler import DataHandler
 from pointcollectors import PointCollectionMode, TauCollectionMode
 from settings import Settings, PyqtgraphSettings, PlottingStyles
 import pyqtgraph as pg
+from IPython import embed
 
 
 class MyTextItem(pg.TextItem):
@@ -97,6 +98,7 @@ class Controller(QObject):
         self.event_plots = []
         self.stimulus_onsets_visible = False
         self.stimulus_info_box_visible = False
+        self.show_fbs = False
 
         # KeyBoard Bindings
         self.gui.key_pressed.connect(self.on_key_press)
@@ -111,6 +113,7 @@ class Controller(QObject):
         self.gui.info_label.setText('Please Open Data File ...')
         self.clear_plots()
         self.event_plots = []
+        self.show_fbs = False
         self.stimulus_onsets_visible = False
         self.stimulus_info_box_visible = False
         self.event_text = None
@@ -134,6 +137,7 @@ class Controller(QObject):
         self.freeze_gui(freeze=True, menu=False)
         self.gui.toolbar_show_stimulus.setDisabled(True)
         self.gui.toolbar_show_stimulus_info.setDisabled(True)
+        self.gui.toolbar_fbs_trace_action.setDisabled(True)
 
     def prepare_new_data(self):
         self.gui.info_label.setText('')
@@ -151,6 +155,7 @@ class Controller(QObject):
         self.gui.file_menu_action_save_csv.setDisabled(False)
         self.gui.file_menu_action_save_viewer_file.setDisabled(False)
         self.gui.trace_plot_item.setLabel('left', 'Raw', **PlottingStyles.axis_label_styles)
+        self.gui.toolbar_fbs_trace_action.setDisabled(False)
 
     def plot_design(self):
         self.gui.trace_plot_item.setLabel('bottom', 'Time [s]', **PlottingStyles.axis_label_styles)
@@ -208,6 +213,7 @@ class Controller(QObject):
         self.gui.toolbar_filter_action.triggered.connect(self.activate_filter)
         self.gui.toolbar_show_stimulus.triggered.connect(self.plot_stimulus_onsets)
         self.gui.toolbar_show_stimulus_info.triggered.connect(self.stimulus_info_box)
+        self.gui.toolbar_fbs_trace_action.triggered.connect(self.toggle_base_line_trace)
 
         # Filter
         self.gui.filter_locK_button.clicked.connect(self.lock_filter_slider)
@@ -312,39 +318,76 @@ class Controller(QObject):
             events = self.data_handler.get_roi_events(self.data_handler.roi_id)
             for key in events:
                 t, f_y = self.cut_out_trace(start_idx=events[key]['start_idx'], end_idx=events[key]['end_idx'])
-                plot_data_item = pg.PlotDataItem(
-                    t, f_y,
-                    pen=pg.mkPen(color=events[key]['pen_color']),
-                    name=f'{key}_trace',
-                    skipFiniteCheck=True,
-                    tip=None,
+                # plot_data_item = pg.PlotDataItem(
+                #     t, f_y,
+                #     pen=pg.mkPen(color=events[key]['pen_color']),
+                #     name=f'{key}_trace',
+                #     skipFiniteCheck=True,
+                #     tip=None,
+                # )
+
+                plot_data_item = HoverableCurveItem(
+                    x=t,
+                    y=f_y,
+                    name=f'event_{key}',
+                    pen=pg.mkPen(color=events[key]['pen_color'], width=1),
+                    hoverPen=pg.mkPen(color=events[key]['hover_pen_color'], width=2),
+                    data_name=f'event_{key}',
+                    event_id=key,
                 )
-                # plot_data_item.setAlpha(0.1, False)
 
                 self.gui.trace_plot_item.addItem(plot_data_item)
                 self.event_plots.append(plot_data_item)
+                plot_data_item.sigDeleteEvent.connect(self.remove_event)
+                plot_data_item.sigCurveHovered.connect(self.show_event_info_box)
+                plot_data_item.sigCurveNotHovered.connect(self.hide_event_info_box)
 
                 if self.filter_is_active:
                     # Filtered trace
                     t2, f_y2 = self.cut_out_trace(start_idx=events[key]['start_idx'], end_idx=events[key]['end_idx'],
                                                   filtered=True)
-                    plot_data_item2 = HoverableCurveItem(
-                        x=t2,
-                        y=f_y2,
-                        name=f'event_{key}',
-                        pen=pg.mkPen(color=events[key]['pen_darker_color'], width=3),
-                        hoverPen=pg.mkPen(color=events[key]['hover_pen_color'], width=8),
-                        data_name=f'event_{key}',
-                        event_id=key,
+                    # plot_data_item2 = HoverableCurveItem(
+                    #     x=t2,
+                    #     y=f_y2,
+                    #     name=f'event_{key}',
+                    #     pen=pg.mkPen(color=events[key]['pen_darker_color'], width=3),
+                    #     hoverPen=pg.mkPen(color=events[key]['hover_pen_color'], width=8),
+                    #     data_name=f'event_{key}',
+                    #     event_id=key,
+                    # )
+
+                    plot_data_item2 = pg.PlotDataItem(
+                        t2, f_y2,
+                        pen=pg.mkPen(color=events[key]['pen_darker_color']),
+                        name=f'{key}_trace',
+                        skipFiniteCheck=True,
+                        tip=None,
                     )
 
-                    plot_data_item2.setClickable(True)
+                    # plot_data_item2.setClickable(True)
                     self.gui.trace_plot_item.addItem(plot_data_item2)
                     self.event_plots.append(plot_data_item2)
-                    plot_data_item2.sigDeleteEvent.connect(self.remove_event)
-                    plot_data_item2.sigCurveHovered.connect(self.show_event_info_box)
-                    plot_data_item2.sigCurveNotHovered.connect(self.hide_event_info_box)
-                    self.plot_exp_fits()
+                    # plot_data_item2.sigDeleteEvent.connect(self.remove_event)
+                    # plot_data_item2.sigCurveHovered.connect(self.show_event_info_box)
+                    # plot_data_item2.sigCurveNotHovered.connect(self.hide_event_info_box)
+                self.plot_exp_fits()
+
+        if self.show_fbs:
+            if self.data_handler.data_norm_mode == 'raw':
+                # fbs_trace = np.zeros_like(time_axis) + self.data_handler.data[self.data_handler.roi_id]['data_traces']['fbs']
+                fbs_trace = [self.data_handler.data[self.data_handler.roi_id]['data_traces']['fbs'], self.data_handler.data[self.data_handler.roi_id]['data_traces']['fbs']]
+            else:
+                fbs_trace = [0, 0]
+
+            time_points = [np.min(time_axis), np.max(time_axis)]
+            plot_data_item = pg.PlotDataItem(
+                time_points, fbs_trace,
+                pen=pg.mkPen(color='g', width=3),
+                name=f'base_line',
+                skipFiniteCheck=True,
+                tip=None,
+            )
+            self.gui.trace_plot_item.addItem(plot_data_item)
 
     def clear_plots(self):
         self.gui.trace_plot_item.clear()
@@ -738,6 +781,16 @@ class Controller(QObject):
     # ==================================================================================================================
     # EVENT MODE HANDLING
     # ------------------------------------------------------------------------------------------------------------------
+    def toggle_base_line_trace(self):
+        if self.show_fbs:
+            self.show_fbs = False
+            self.gui.toolbar_fbs_trace_action.setText('Show Baseline')
+            self.update_plot()
+        else:
+            self.show_fbs = True
+            self.gui.toolbar_fbs_trace_action.setText('Hide Baseline')
+            self.update_plot()
+
     def set_collection_mode_color(self, on=True):
         if on:
             self.gui.plot_graphics_layout_widget.setBackground(pg.mkColor(PlottingStyles.collecting_mode_bg))
@@ -830,6 +883,18 @@ class Controller(QObject):
             )
             self.tau_collection.start_tau_collecting(points)
 
+    def compute_peak_amplitudes(self, idx_min, idx_max, mode='rise'):
+        traces = self.data_handler.data[self.data_handler.roi_id]['data_traces']
+        peak_amplitudes = dict()
+        for key in traces:
+            if key == 'fbs':
+                continue
+            trace = traces[key]
+            min_y = trace[idx_min]
+            max_y = trace[idx_max]
+            peak_amplitudes[f'peak_{key}_{mode}'] = max_y - min_y
+        return peak_amplitudes
+
     def collecting_taus(self):
         results = self.tau_collection.get_tau_values()
         self.tau_collection.stop_collecting()
@@ -851,23 +916,36 @@ class Controller(QObject):
             y=trace,
             idx=[idx_1, idx_2, idx_3]
         )
+        # Add fitting results
         results.update(fit_results)
+
+        # Compute Peak Amplitudes
+        peak_amplitudes_1 = self.compute_peak_amplitudes(idx_min=idx_1, idx_max=idx_2, mode='rise')
+        peak_amplitudes_2 = self.compute_peak_amplitudes(idx_min=idx_3, idx_max=idx_2, mode='decay')
+        results.update(peak_amplitudes_1)
+        results.update(peak_amplitudes_2)
 
         # Compute random color
         rand_color, rand_color_darker = self.random_color()
+
+        # Add idx and colors
         results.update({
             'start_idx': idx_1,
             'center_idx': idx_2,
             'end_idx': idx_3,
             'pen_color': rand_color,
             'pen_darker_color': rand_color_darker,
-            'hover_pen_color': 'r'
+            'hover_pen_color': 'r',
+            'filter_window': self.data_handler.filter_window,
+            'recording_name': self.data_handler.data_name,
+            'sampling_rate': self.data_handler.meta_data['sampling_rate'],
+            'norm_mode': self.data_handler.data_norm_mode,
         })
 
         # add event to data handler
         even_id = self.data_handler.get_events_count(self.data_handler.roi_id)
         self.data_handler.add_event(event_data=results, event_id=even_id, roi_id=self.data_handler.roi_id)
-        # self.plot_traces(update_axis=False)
+
         self.update_plot(update_axis=False)
         self.set_collection_mode_color(on=False)
 
