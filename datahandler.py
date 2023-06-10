@@ -132,6 +132,16 @@ class DataHandler(QObject):
                 self.data[self.roi_id][self.data_traces_key]['filtered'] = data
                 self.filtered_trace = data
 
+    def get_filtered_trace(self, roi_id, norm_mode):
+        if self.data is not None and self.filter_window is not None:
+            win = int(self.filter_window * self.meta_data['sampling_rate'])
+            trace = self.data[roi_id][self.data_traces_key][norm_mode]
+            if win > 0:
+                filtered_data = np.convolve(trace, np.ones(win) / win, mode='same')
+                return filtered_data
+            else:
+                return None
+
     def add_data_trace(self, data_trace, data_trace_name, roi_id):
         self.data[roi_id][self.data_traces_key][data_trace_name] = data_trace
 

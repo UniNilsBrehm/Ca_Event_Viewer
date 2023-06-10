@@ -103,6 +103,7 @@ class Controller(QObject):
         # KeyBoard Bindings
         self.gui.key_pressed.connect(self.on_key_press)
         self.gui.key_released.connect(self.on_key_release)
+        self.gui.trace_plot_item.scene().sigMouseMoved.connect(self.mouse_moved)
 
         self.filter_locked = True
         self.filter_is_active = False
@@ -231,6 +232,7 @@ class Controller(QObject):
         self.shortcut_import_meta_data = QShortcut(QKeySequence('ctrl+m'), self.gui)
         self.shortcut_import_stimulus = QShortcut(QKeySequence('ctrl+b'), self.gui)
         self.shortcut_exit = QShortcut(QKeySequence('ctrl+q'), self.gui)
+        self.shortcut_reset_axis = QShortcut(QKeySequence('R'), self.gui)
 
     def _connect_short_cuts(self, connect=True):
         if connect:
@@ -243,6 +245,7 @@ class Controller(QObject):
             self.shortcut_import_meta_data.activated.connect(self.import_meta_data)
             self.shortcut_import_stimulus.activated.connect(self.import_stimulus)
             self.shortcut_exit.activated.connect(self.gui.exit_app)
+            self.shortcut_reset_axis.activated.connect(self.reset_axis)
         else:
             self.shortcut_next_roi.activated.disconnect()
             self.shortcut_prev_roi.activated.disconnect()
@@ -325,7 +328,6 @@ class Controller(QObject):
                 #     skipFiniteCheck=True,
                 #     tip=None,
                 # )
-
                 plot_data_item = HoverableCurveItem(
                     x=t,
                     y=f_y,
@@ -372,6 +374,36 @@ class Controller(QObject):
                     # plot_data_item2.sigCurveNotHovered.connect(self.hide_event_info_box)
                 self.plot_exp_fits()
 
+                # Plot the Points
+                p1_idx = 0
+                p2_idx = events[key]['center_idx']-events[key]['start_idx']
+                p3_idx = -1
+                p1_t = events[key]['p1_t']
+                p2_t = events[key]['p2_t']
+                p3_t = events[key]['p3_t']
+                points_t = [p1_t, p2_t, p3_t]
+                if self.filter_is_active:
+                    p1_y = f_y2[p1_idx]
+                    p2_y = f_y2[p2_idx]
+                    p3_y = f_y2[p3_idx]
+                else:
+                    p1_y = f_y[p1_idx]
+                    p2_y = f_y[p2_idx]
+                    p3_y = f_y[p3_idx]
+                points_y = [p1_y, p2_y, p3_y]
+
+                plot_data_item = pg.ScatterPlotItem(
+                    points_t, points_y,
+                    symbol='d',
+                    pen=pg.mkPen(color='b', width=2),
+                    brush=pg.mkBrush(color='g'),
+                    size=15,
+                    name=f'{key}_points',
+                    skipFiniteCheck=True,
+                    tip=None,
+                )
+                self.gui.trace_plot_item.addItem(plot_data_item)
+
         if self.show_fbs:
             if self.data_handler.data_norm_mode == 'raw':
                 # fbs_trace = np.zeros_like(time_axis) + self.data_handler.data[self.data_handler.roi_id]['data_traces']['fbs']
@@ -392,6 +424,10 @@ class Controller(QObject):
     def clear_plots(self):
         self.gui.trace_plot_item.clear()
         self.gui.stimulus_plot_item.clear()
+
+    def reset_axis(self):
+        if self.data_handler.data is not None:
+            self._update_axis_limits(time_axis=self.data_handler.get_time_axis(self.data_handler.roi_id))
 
     def _update_axis_limits(self, time_axis):
         # Get min and max values of all rois
@@ -671,10 +707,12 @@ class Controller(QObject):
         if file_dir:
             data = pickle.dumps(self.data_handler.data)
             meta_data = pickle.dumps(self.data_handler.meta_data)
+            filter_window = pickle.dumps(self.data_handler.filter_window)
 
             with ZipFile(file_dir, 'w') as zip_object:
                 zip_object.writestr('data.pickle', data)
                 zip_object.writestr('meta_data.pickle', meta_data)
+                zip_object.writestr('filter_window.pickle', filter_window)
 
     def _load_file(self):
         file_dir = self.get_a_file_dir(default_dir=Settings.default_dir, file_format='viewer file, (*.vf)')
@@ -683,6 +721,11 @@ class Controller(QObject):
             with ZipFile(file_dir, 'r') as zip_object:
                 data = pickle.loads(zip_object.read('data.pickle'))
                 meta_data = pickle.loads(zip_object.read('meta_data.pickle'))
+                try:
+                    filter_window = pickle.loads(zip_object.read('filter_window.pickle'))
+                except KeyError:
+                    print('Foun No Filter Settings')
+                    filter_window = None
 
             self.data_handler.load_new_data_set(data=data, meta_data=meta_data)
             self.data_handler.change_roi(self.data_handler.meta_data['roi_list'][0])
@@ -695,6 +738,10 @@ class Controller(QObject):
             else:
                 self.gui.toolbar_show_stimulus.setDisabled(True)
                 self.gui.toolbar_show_stimulus_info.setDisabled(True)
+
+            if filter_window is not None:
+                self.data_handler.filter_window = filter_window
+                self.gui.filter_slider.setValue(int(self.data_handler.filter_window * 1000))
 
     # ==================================================================================================================
     # GUI AND DATA HANDLING
@@ -752,6 +799,7 @@ class Controller(QObject):
         y_min, y_max = np.min(min_vals), np.max(max_vals)
 
         return y_min, y_max
+
     @staticmethod
     def random_color():
         start = 50
@@ -884,10 +932,17 @@ class Controller(QObject):
             self.tau_collection.start_tau_collecting(points)
 
     def compute_peak_amplitudes(self, idx_min, idx_max, mode='rise'):
-        traces = self.data_handler.data[self.data_handler.roi_id]['data_traces']
         peak_amplitudes = dict()
+        if self.filter_is_active:
+            for norm in ['raw', 'df', 'z']:
+                filtered_trace = self.data_handler.get_filtered_trace(self.data_handler.roi_id, norm_mode=norm)
+                min_y = filtered_trace[idx_min]
+                max_y = filtered_trace[idx_max]
+                peak_amplitudes[f'peak_filtered_{norm}_{mode}'] = max_y - min_y
+
+        traces = self.data_handler.data[self.data_handler.roi_id]['data_traces']
         for key in traces:
-            if key == 'fbs':
+            if key == 'fbs' or 'filtered':
                 continue
             trace = traces[key]
             min_y = trace[idx_min]
@@ -1022,6 +1077,7 @@ class Controller(QObject):
             self.data_handler.change_roi(self.data_handler.roi_id)
             # self.plot_filtered_trace()
             self.update_plot()
+            self.gui.toolbar_filter_action.setText('Turn Filter ON')
         else:
             # Activate Filter
             self.filter_locked = True
@@ -1032,6 +1088,7 @@ class Controller(QObject):
             self.data_handler.change_roi(self.data_handler.roi_id)
             # self.plot_filtered_trace()
             self.update_plot()
+            self.gui.toolbar_filter_action.setText('Turn Filter OFF')
 
     # ==================================================================================================================
     # MOUSE AND KEY PRESS HANDLING
@@ -1075,3 +1132,8 @@ class Controller(QObject):
     def exit_app(self):
         self.gui.close()
 
+    def mouse_moved(self, event):
+        vb = self.gui.trace_plot_item.vb
+        if self.gui.trace_plot_item.sceneBoundingRect().contains(event):
+            mouse_point = vb.mapSceneToView(event)
+            self.gui.mouse_label.setText(f"<p style='color:black'>X： {mouse_point.x():.4f} <br> Y: {mouse_point.y():.4f}</p>")
