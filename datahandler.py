@@ -1,8 +1,10 @@
+import more_itertools
 import numpy as np
 from scipy.optimize import curve_fit
 from scipy import signal
 from PyQt6.QtCore import pyqtSignal, QObject
 from settings import Settings
+from IPython import embed
 """
 Data Structure:
 .
@@ -142,13 +144,17 @@ class DataHandler(QObject):
             self.compute_low_pass_filter()
         elif filter_name == 'moving_average':
             self.moving_average_filter()
+        elif filter_name == 'diff':
+            self.differential_filter()
+        elif filter_name == 'pot':
+            self.pot_filter()
         else:
             print('ERROR: Could not find Filter Name', filter_name)
 
     def compute_low_pass_filter(self):
         if self.data is not None and self.filter_window is not None:
             cut_off = self.filter_window  # in Hz (0 - Nyquist Hz)
-            data = self.data[self.roi_id][self.data_traces_key][self.data_norm_mode]
+            data = self.data[self.roi_id][self.data_traces_key][self.data_norm_mode].copy()
             if cut_off > 0:
                 fs = self.meta_data['sampling_rate']
                 filtered_data = self.butter_filter(data, filter_type='low', cutoff=cut_off, fs=fs, order=2)
@@ -161,7 +167,7 @@ class DataHandler(QObject):
     def compute_high_pass_filter(self):
         if self.data is not None and self.filter_window is not None:
             cut_off = self.filter_window  # in Hz (0 - Nyquist Hz)
-            data = self.data[self.roi_id][self.data_traces_key][self.data_norm_mode]
+            data = self.data[self.roi_id][self.data_traces_key][self.data_norm_mode].copy()
             if cut_off > 0:
                 fs = self.meta_data['sampling_rate']
                 filtered_data = self.butter_filter(data, filter_type='high', cutoff=cut_off, fs=fs, order=2)
@@ -171,11 +177,31 @@ class DataHandler(QObject):
                 self.data[self.roi_id][self.data_traces_key]['filtered'] = data
                 self.filtered_trace = data
 
+    def differential_filter(self):
+        if self.data is not None and self.filter_window is not None:
+            data = self.data[self.roi_id][self.data_traces_key][self.data_norm_mode].copy()
+            filtered_data = np.diff(data, append=0)
+            self.data[self.roi_id][self.data_traces_key]['filtered'] = filtered_data
+            self.filtered_trace = filtered_data
+
+    def pot_filter(self):
+        if self.data is not None and self.filter_window is not None:
+            pot = self.filter_window
+            data = self.data[self.roi_id][self.data_traces_key][self.data_norm_mode].copy()
+            if pot < 1:
+                data[data < 0] = 0
+                # filtered_data = abs(data) ** pot
+                filtered_data = data ** pot
+            else:
+                filtered_data = data ** pot
+            self.data[self.roi_id][self.data_traces_key]['filtered'] = filtered_data
+            self.filtered_trace = filtered_data
+
     def moving_average_filter(self):
         if self.data is not None and self.filter_window is not None:
             fs = self.meta_data['sampling_rate']
             win = int(self.filter_window * fs)
-            data = self.data[self.roi_id][self.data_traces_key][self.data_norm_mode]
+            data = self.data[self.roi_id][self.data_traces_key][self.data_norm_mode].copy()
             if win > 0:
                 filtered_data = np.convolve(data, np.ones(win) / win, mode='same')
                 self.data[self.roi_id][self.data_traces_key]['filtered'] = filtered_data
@@ -188,7 +214,7 @@ class DataHandler(QObject):
         if self.data is not None and self.filter_window is not None:
             fs = self.meta_data['sampling_rate']
             win = int(self.filter_window * fs)
-            trace = self.data[roi_id][self.data_traces_key][norm_mode]
+            trace = self.data[roi_id][self.data_traces_key][norm_mode].copy()
             if win > 0:
                 filtered_data = np.convolve(trace, np.ones(win) / win, mode='same')
                 return filtered_data
@@ -202,6 +228,12 @@ class DataHandler(QObject):
         fbs, data_df = self._to_df_over_f(raw_data=data_trace)
         self.data[roi_id][self.data_traces_key]['fbs'] = fbs
         self.data[roi_id][self.data_traces_key]['df'] = data_df
+
+        # Compute sliding delta f over f
+        if Settings.sliding_df_activated:
+            sliding_base_line = self._to_sliding_df_over_f(raw_data=data_trace)
+            data_sliding_df = (data_trace - sliding_base_line) / sliding_base_line
+            self.data[roi_id][self.data_traces_key]['sliding_df'] = data_sliding_df
 
         # Compute z score
         z_score = self._to_z_score(data_df)
@@ -217,10 +249,48 @@ class DataHandler(QObject):
         data_min_max = (raw_data - np.min(raw_data)) / (np.max(raw_data) - np.min(raw_data))
         return data_min_max
 
-    def _to_df_over_f(self, raw_data):
+    def _to_df_over_f(self, raw_data, fbs=None):
         fbs = np.percentile(raw_data, self.fbs_per, axis=0)
         data_df = (raw_data - fbs) / fbs
         return fbs, data_df
+
+    def _to_sliding_df_over_f(self, raw_data):
+        """ Compute a signal base line based on the (5 %) percentile of a  sliding window.
+                ----------
+                sig : pandas data frame, shape (N,)
+                    the values of all ROIs.
+                win_size : float or integer
+                    sliding window size in samples.
+                per : float
+                    percentile value (e.g. 5 %)
+                fast_method: Boolean
+                    if True, use the fast method based on numpy percentile function
+                    if False, use slow method based on the median value of the smallest 5 % values in the window
+                Returns
+                -------
+                output : array_like
+                    the estimated base line of the input signal.
+                Notes
+                -----
+            """
+
+        fs = self.meta_data['sampling_rate']
+        window_time = Settings.sliding_df_window_time
+        win_size = int(window_time * fs)
+
+        # Check if window size is even:
+        if (win_size % 2) > 0:  # is it odd?
+            # Then make it an even number by adding 1:
+            win_size += 1
+
+        # Padding: Add as many value (edges) as win_size
+        sig = np.pad(raw_data, (int(win_size / 2), int((win_size / 2) - 1)), 'edge')
+
+        # Create window (so that +- win_size centered around point of interest)
+        win = list(more_itertools.windowed(sig, n=win_size, step=1))
+        # Compute percentiles
+        base_line = np.percentile(win, self.fbs_per, axis=1)
+        return base_line
 
     @staticmethod
     def _to_z_score(data):

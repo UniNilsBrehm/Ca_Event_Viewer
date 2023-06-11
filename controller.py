@@ -4,12 +4,14 @@ from zipfile import ZipFile
 import numpy as np
 import pandas as pd
 from PyQt6.QtGui import QShortcut, QKeySequence, QFont
-from PyQt6.QtWidgets import QFileDialog, QInputDialog, QLineEdit, QMessageBox
+from PyQt6.QtWidgets import QFileDialog, QInputDialog, QLineEdit, QMessageBox, QScrollArea
 from PyQt6.QtCore import pyqtSignal, QObject, Qt
 from datahandler import DataHandler
 from pointcollectors import PointCollectionMode, TauCollectionMode
 from settings import Settings, PyqtgraphSettings, PlottingStyles
 import pyqtgraph as pg
+from gui import NewWindow
+
 from IPython import embed
 
 
@@ -87,9 +89,10 @@ class Controller(QObject):
     # ==================================================================================================================
     # INITIALIZING
     # ------------------------------------------------------------------------------------------------------------------
-    def __init__(self, gui):
+    def __init__(self, main_window):
         QObject.__init__(self)
-        self.gui = gui
+        self.gui = main_window
+        self.new_window = None
         self.gui.closeEvent = self.closeEvent
         self.plot_design()
         self.connections()
@@ -111,12 +114,17 @@ class Controller(QObject):
         # self.data_handler.signal_new_data.emit()
 
         # Add the Filters
+        self.filter_step_size = Settings.filter_step
         self.gui.filter_selection_combobox.addItem('Moving Average')
         self.gui.filter_selection_combobox.setItemData(0, 'moving_average')
         self.gui.filter_selection_combobox.addItem('High Pass')
         self.gui.filter_selection_combobox.setItemData(1, 'high_pass')
         self.gui.filter_selection_combobox.addItem('Low Pass')
         self.gui.filter_selection_combobox.setItemData(2, 'low_pass')
+        self.gui.filter_selection_combobox.addItem('Differential')
+        self.gui.filter_selection_combobox.setItemData(3, 'diff')
+        self.gui.filter_selection_combobox.addItem('pot')
+        self.gui.filter_selection_combobox.setItemData(4, 'pot')
         self.gui.filter_selection_combobox.setDisabled(True)
         self.filter_name = 'moving_average'
 
@@ -132,6 +140,7 @@ class Controller(QObject):
         self.data_handler = DataHandler()
         self.signals()
         self.filter_locked = True
+        self.filter_step_size = Settings.filter_step
         self.filter_is_active = False
         self.gui.filter_locK_button.setDisabled(True)
         self.gui.filter_slider.setDisabled(True)
@@ -215,6 +224,8 @@ class Controller(QObject):
         self.gui.file_menu_action_save_viewer_file.triggered.connect(self._save_file)
         self.gui.file_menu_action_exit.triggered.connect(self.gui.exit_app)
 
+        self.gui.plot_menu_action_multiplot.triggered.connect(self.multi_plot)
+
         # Buttons
         self.gui.next_button.clicked.connect(self._next_roi)
         self.gui.prev_button.clicked.connect(self._prev_roi)
@@ -222,6 +233,8 @@ class Controller(QObject):
         # Toolbar Buttons
         self.gui.toolbar_raw_action.triggered.connect(self._set_to_raw)
         self.gui.toolbar_df_action.triggered.connect(self._set_to_df)
+        if Settings.sliding_df_activated:
+            self.gui.toolbar_sliding_df_action.triggered.connect(self._set_to_sliding_df)
         self.gui.toolbar_z_score_action.triggered.connect(self._set_to_z_score)
         self.gui.toolbar_filter_action.triggered.connect(self.activate_filter)
         self.gui.toolbar_show_stimulus.triggered.connect(self.plot_stimulus_onsets)
@@ -267,6 +280,23 @@ class Controller(QObject):
     # ==================================================================================================================
     # PLOTTING
     # ------------------------------------------------------------------------------------------------------------------
+    def multi_plot(self):
+        self.sa = QScrollArea()
+        self.sa.setWidgetResizable(False)
+        self.sa.setFixedHeight(800)
+        # self.sa.setFixedWidth(1500)
+
+        self.w = pg.GraphicsLayoutWidget()
+        self.w.setFixedHeight(2000)
+        self.w.setFixedWidth(1500)
+        self.sa.setWidget(self.w)
+        for i, roi in enumerate(self.data_handler.meta_data['roi_list']):
+            data = self.data_handler.data[roi]['data_traces'][self.data_handler.data_norm_mode]
+            t = self.data_handler.get_time_axis(roi)
+            self.w.addPlot(x=t, y=data, pen=pg.mkPen(color='k'), row=i, col=0)
+        self.sa.show()
+        print(i)
+
     def update_plot(self, update_axis=False):
         # Clear the plot
         self.gui.trace_plot_item.clear()
@@ -275,7 +305,6 @@ class Controller(QObject):
         self.gui.trace_plot_item.setTitle(f'ROI_{self.data_handler.roi_id}')
         time_axis = self.data_handler.get_time_axis(self.data_handler.roi_id)
         f_y = self.data_handler.data[self.data_handler.roi_id]['data_traces'][self.data_handler.data_norm_mode]
-
         if self.filter_is_active:
             trace_pen = PlottingStyles.line_pen_transparent
         else:
@@ -796,6 +825,12 @@ class Controller(QObject):
         self.update_plot(update_axis=True)
         self.gui.trace_plot_item.setLabel('left', 'dF/F', **PlottingStyles.axis_label_styles)
 
+    def _set_to_sliding_df(self):
+        self.data_handler.data_norm_mode = 'sliding_df'
+        self.data_handler.filter_data(filter_name=self.filter_name)
+        self.update_plot(update_axis=True)
+        self.gui.trace_plot_item.setLabel('left', 'dF/F', **PlottingStyles.axis_label_styles)
+
     def _set_to_z_score(self):
         self.data_handler.data_norm_mode = 'z'
         # self.plot_traces(update_axis=True)
@@ -851,6 +886,7 @@ class Controller(QObject):
         self.gui.toolbar_raw_action.setDisabled(freeze)
         self.gui.toolbar_min_max_action.setDisabled(freeze)
         self.gui.toolbar_df_action.setDisabled(freeze)
+        self.gui.toolbar_sliding_df_action.setDisabled(freeze)
         self.gui.toolbar_z_score_action.setDisabled(freeze)
         self.gui.toolbar_filter_action.setDisabled(freeze)
         self.gui.toolbar_show_stimulus.setDisabled(freeze)
@@ -893,6 +929,7 @@ class Controller(QObject):
             self.gui.toolbar_raw_action.setDisabled(True)
             self.gui.toolbar_min_max_action.setDisabled(True)
             self.gui.toolbar_df_action.setDisabled(True)
+            self.gui.toolbar_sliding_df_action.setDisabled(True)
             self.gui.toolbar_z_score_action.setDisabled(True)
             self.gui.toolbar_filter_action.setDisabled(True)
             self.gui.toolbar_show_stimulus.setDisabled(True)
@@ -918,6 +955,7 @@ class Controller(QObject):
             self.gui.toolbar_raw_action.setDisabled(False)
             self.gui.toolbar_min_max_action.setDisabled(False)
             self.gui.toolbar_df_action.setDisabled(False)
+            self.gui.toolbar_sliding_df_action.setDisabled(False)
             self.gui.toolbar_z_score_action.setDisabled(False)
             self.gui.toolbar_filter_action.setDisabled(False)
             if len(self.data_handler.meta_data['stimulus']) > 0:
@@ -972,7 +1010,11 @@ class Controller(QObject):
     def compute_peak_amplitudes(self, idx_min, idx_max, mode='rise'):
         peak_amplitudes = dict()
         if self.filter_is_active:
-            for norm in ['raw', 'min_max', 'df', 'z']:
+            norm_modes = list(self.data_handler.data[self.data_handler.roi_id]['data_traces'].keys())
+            # for norm in ['raw', 'min_max', 'df', 'sliding_df', 'z']:
+            for norm in norm_modes:
+                if norm == 'fbs' or 'filtered':
+                    continue
                 filtered_trace = self.data_handler.get_filtered_trace(self.data_handler.roi_id, norm_mode=norm)
                 min_y = filtered_trace[idx_min]
                 max_y = filtered_trace[idx_max]
@@ -1080,11 +1122,13 @@ class Controller(QObject):
     # DATA TRACE FILTER HANDLING
     # ------------------------------------------------------------------------------------------------------------------
     def change_filter(self):
+        # Change Filter Slider
         # Get the combobox item
         self.filter_name = self.gui.filter_selection_combobox.currentData()
         self.filter_slider_changed()
         self.data_handler.filter_data(filter_name=self.filter_name)
         self.update_plot()
+        self._update_axis_limits(time_axis=self.data_handler.get_time_axis(self.data_handler.roi_id))
 
     def lock_filter_slider(self):
         if self.filter_locked:
@@ -1102,27 +1146,49 @@ class Controller(QObject):
 
     def filter_slider_read(self):
         slider_value = float(self.gui.filter_slider.value())
-        return slider_value
+        # Correct for step size
+        corrected = round(float(slider_value) / self.filter_step_size) * self.filter_step_size
+        return corrected
 
     def filter_slider_changed(self):
         # Default Value Range: 0 - 10 000
         filter_value = self.filter_slider_read()
         fs = self.data_handler.meta_data['sampling_rate']
         nyquist_freq = fs / 2
-        # self.data_handler.filter_window = self.filter_slider_read()
-
+        self.gui.filter_slider.setDisabled(False)
+        self.filter_step_size = Settings.filter_step
         if self.filter_name == 'moving_average':
+            self.gui.filter_slider.setTickInterval(Settings.filter_interval)
             # from ms to s
             self.data_handler.filter_window = filter_value / 1000
             self.gui.filter_slider_label.setText(f'Filter Window: {self.data_handler.filter_window:.3f} s')
         elif self.filter_name == 'low_pass':
+            self.gui.filter_slider.setTickInterval(Settings.filter_interval)
             # Norm to 0 - Nyquist Freq.
-            self.data_handler.filter_window = (filter_value / 10000) * nyquist_freq
+            self.data_handler.filter_window = (filter_value / Settings.filter_max) * nyquist_freq
             self.gui.filter_slider_label.setText(f'Filter Window: {self.data_handler.filter_window:.3f} Hz')
         elif self.filter_name == 'high_pass':
+            self.gui.filter_slider.setTickInterval(Settings.filter_interval)
             # Norm to 0 - Nyquist Freq.
-            self.data_handler.filter_window = (filter_value / 10000) * nyquist_freq
+            self.data_handler.filter_window = (filter_value / Settings.filter_max) * nyquist_freq
             self.gui.filter_slider_label.setText(f'Filter Window: {self.data_handler.filter_window:.3f} Hz')
+
+        elif self.filter_name == 'pot':
+            highest_pot = 8
+            self.filter_step_size = Settings.filter_max / highest_pot
+            filter_parameter = (filter_value / Settings.filter_max) * highest_pot
+            if filter_parameter == 1:
+                self.data_handler.filter_window = (1/2)
+            elif filter_parameter == 0:
+                self.data_handler.filter_window = (1/3)
+            else:
+                self.data_handler.filter_window = (filter_value / Settings.filter_max) * highest_pot
+            self.gui.filter_slider_label.setText(f'Filter Window: x**{self.data_handler.filter_window:.2f}')
+        elif self.filter_name == 'diff':
+            self.gui.filter_slider.setTickInterval(Settings.filter_interval)
+            self.gui.filter_slider.setDisabled(True)
+        else:
+            print('ERROR: NO FILTER TYPE SELECTED!')
 
         # Compute Filter
         # self.data_handler.moving_average_filter()
@@ -1134,22 +1200,22 @@ class Controller(QObject):
     def activate_filter(self):
         if self.filter_is_active:
             # Deactivate Filter
+            self.data_handler.change_roi(self.data_handler.roi_id)
             self.filter_locked = False
             self.filter_is_active = False
             self.lock_filter_slider()
             self.gui.filter_locK_button.setDisabled(True)
-            self.data_handler.change_roi(self.data_handler.roi_id)
             # self.plot_filtered_trace()
             self.update_plot()
             self.gui.toolbar_filter_action.setText('Turn Filter ON')
         else:
             # Activate Filter
+            self.data_handler.change_roi(self.data_handler.roi_id)
             self.filter_locked = True
             self.filter_is_active = True
             self.lock_filter_slider()
             self.gui.filter_locK_button.setDisabled(False)
-            self.filter_slider_changed()
-            self.data_handler.change_roi(self.data_handler.roi_id)
+            self.change_filter()
             # self.plot_filtered_trace()
             self.update_plot()
             self.gui.toolbar_filter_action.setText('Turn Filter OFF')

@@ -11,9 +11,8 @@ def main():
 
     # GUI
     window = MainWindow(screen)
-
     # Start Controller
-    Controller(gui=window)
+    Controller(main_window=window)
     window.show()
     app.exec()
 

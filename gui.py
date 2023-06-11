@@ -1,7 +1,7 @@
 from PyQt6.QtGui import QFont, QAction, QContextMenuEvent
 from PyQt6.QtCore import pyqtSignal, Qt, QEvent
 from PyQt6.QtWidgets import QMainWindow, QPushButton, QWidget, QLabel, QVBoxLayout, \
-    QMessageBox, QHBoxLayout, QSlider, QComboBox, QToolBar
+    QMessageBox, QHBoxLayout, QSlider, QComboBox, QToolBar, QScrollArea
 import pyqtgraph as pg
 from settings import Settings
 
@@ -13,6 +13,33 @@ class MyToolbar(QToolBar):
     def contextMenuEvent(self, a0: QContextMenuEvent) -> None:
         # Turn off right click context menu
         pass
+
+
+class NewWindow(QWidget):
+    """
+    This "window" is a QWidget. If it has no parent, it
+    will appear as a free-floating window as we want.
+    """
+    def __init__(self):
+        super().__init__()
+
+        self.graphics_layout_widget = pg.GraphicsLayoutWidget(show=True)
+        # # label = QLabel('NEW WINDOW')
+        # self.scroll = QScrollArea()
+        # self.scroll.setWidget(self.graphics_layout_widget)
+        # # scroll.setWidgetResizable(True)
+        # # scroll.setFixedHeight(200)
+        # layout = QVBoxLayout(self)
+        # layout.addWidget(scroll)
+        #
+        # # # Scroll Area Properties
+        # # self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+        # # self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # # self.scroll_area.setWidgetResizable(True)
+        # # self.scroll_area.setWidget(self)
+        # #
+        # self.setGeometry(600, 100, 1000, 900)
+        # self.setWindowTitle('Scroll Area Demonstration')
 
 
 class MainWindow(QMainWindow):
@@ -30,6 +57,7 @@ class MainWindow(QMainWindow):
         self.filter_min = Settings.filter_min
         self.filter_max = Settings.filter_max
         self.filter_interval = Settings.filter_interval
+        self.filter_step = Settings.filter_step
         self.filter_default = Settings.filter_default
         self.filter_on = False
 
@@ -81,6 +109,12 @@ class MainWindow(QMainWindow):
         self.toolbar_df_action = QAction("dF/F", self)
         self.toolbar_df_action.setToolTip("dF/F (F)")
         self.toolbar.addAction(self.toolbar_df_action)
+        # self.shortcut_toolbar_df_action = QShortcut(QKeySequence('F'), self)
+
+        # Sliding dF/F Button
+        self.toolbar_sliding_df_action = QAction("Sliding dF/F", self)
+        self.toolbar_sliding_df_action.setToolTip("Sliding dF/F")
+        self.toolbar.addAction(self.toolbar_sliding_df_action)
         # self.shortcut_toolbar_df_action = QShortcut(QKeySequence('F'), self)
 
         # Z Score Button
@@ -148,7 +182,8 @@ class MainWindow(QMainWindow):
         self.filter_slider.setMaximum(self.filter_max)
         self.filter_slider.setValue(self.filter_default)
         self.filter_slider.setTickPosition(QSlider.TickPosition.NoTicks)
-        self.filter_slider.setTickInterval(self.filter_interval)
+        # self.filter_slider.setTickInterval(self.filter_interval)
+        self.filter_slider.setSingleStep(self.filter_step)
         self.filter_slider_label = QLabel(f'Filter Window {int(self.filter_default / 1000)} s')
         self.filter_locK_button = QPushButton('Locked')
         self.filter_slider.setDisabled(True)
@@ -203,6 +238,8 @@ class MainWindow(QMainWindow):
         # File Menu
         self.menu = self.menuBar()
         self.file_menu = self.menu.addMenu("&File")
+        self.plot_menu = self.menu.addMenu("Plot")
+
         self.file_menu_action_new_session = self.file_menu.addAction('New ... (ctrl+n)')
         self.file_menu_action_open_viewer_file = self.file_menu.addAction('Open Viewer File (ctrl+o)')
         self.file_menu_action_save_viewer_file = self.file_menu.addAction('Save Viewer File (ctrl+s)')
@@ -218,8 +255,9 @@ class MainWindow(QMainWindow):
         self.file_menu.addSeparator()
         self.file_menu_action_noise = self.file_menu.addAction('Compute Noise Statistics')
         self.file_menu.addSeparator()
-
         self.file_menu_action_exit = self.file_menu.addAction('Exit')
+
+        self.plot_menu_action_multiplot = self.plot_menu.addAction('Multi Plot')
 
     def _setup_plot(self):
         # pyqtgraph graphic widget (for plotting later)

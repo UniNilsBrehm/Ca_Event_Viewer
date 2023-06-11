@@ -11,11 +11,16 @@ class Settings:
     sampling_rate = 1 / sampling_dt
     fbs_percentile = 5
 
+    # Sliding delta F over F Settings:
+    sliding_df_activated = False
+    sliding_df_window_time = 60  # in secs
+
     # Filter Settings
     # Values in ms (for moving average filter: 0 - 10 000)
     filter_min = 0
     filter_max = 10 * 1000
     filter_interval = 10
+    filter_step = 10
     filter_default = 5 * 1000
 
 
