@@ -3,6 +3,7 @@ from PyQt6.QtCore import pyqtSignal, Qt, QEvent
 from PyQt6.QtWidgets import QMainWindow, QPushButton, QWidget, QLabel, QVBoxLayout, \
     QMessageBox, QHBoxLayout, QSlider, QComboBox, QToolBar
 import pyqtgraph as pg
+from settings import Settings
 
 
 class MyToolbar(QToolBar):
@@ -25,11 +26,11 @@ class MainWindow(QMainWindow):
         self.screen = screen
 
         # Filter Settings
-        # Values in ms
-        self.filter_min = 0
-        self.filter_max = 10 * 1000
-        self.filter_interval = 10
-        self.filter_default = 5 * 1000
+        # Values in ms (for moving average filter: 0 - 10 000)
+        self.filter_min = Settings.filter_min
+        self.filter_max = Settings.filter_max
+        self.filter_interval = Settings.filter_interval
+        self.filter_default = Settings.filter_default
         self.filter_on = False
 
         # Setup GUI Elements
@@ -137,6 +138,10 @@ class MainWindow(QMainWindow):
         self.roi_selection_combobox_label = QLabel('ROI: ')
         self.roi_selection_combobox = QComboBox()
 
+        # Filter Selection
+        self.filter_selection_combobox_label = QLabel('Filter: ')
+        self.filter_selection_combobox = QComboBox()
+
         # Filter Slider
         self.filter_slider = QSlider(Qt.Orientation.Horizontal)
         self.filter_slider.setMinimum(self.filter_min)
@@ -158,6 +163,9 @@ class MainWindow(QMainWindow):
         self.layout_labels.addStretch()
         self.layout_labels.addWidget(self.roi_selection_combobox_label)
         self.layout_labels.addWidget(self.roi_selection_combobox)
+        self.layout_labels.addStretch()
+        self.layout_labels.addWidget(self.filter_selection_combobox_label)
+        self.layout_labels.addWidget(self.filter_selection_combobox)
         self.layout_labels.addStretch()
         self.layout_labels.addWidget(self.filter_locK_button)
         self.layout_labels.addWidget(self.filter_slider_label)
@@ -232,7 +240,6 @@ class MainWindow(QMainWindow):
         self.trace_plot_item.hideButtons()
         self.stimulus_plot_item.setXLink(self.trace_plot_item)
 
-
     def keyPressEvent(self, event):
         super(MainWindow, self).keyPressEvent(event)
         self.key_pressed.emit(event)
@@ -240,19 +247,6 @@ class MainWindow(QMainWindow):
     def keyReleaseEvent(self, event):
         super(MainWindow, self).keyReleaseEvent(event)
         self.key_released.emit(event)
-
-    # def closeEvent(self, event):
-    #     retval = self.exit_dialog()
-    #
-    #     if retval == QMessageBox.StandardButton.Save:
-    #         # Save before exit
-    #         event.accept()
-    #     elif retval == QMessageBox.StandardButton.Discard:
-    #         # Do not save before exit
-    #         event.accept()
-    #     else:
-    #         # Do not exit
-    #         event.ignore()
 
     def exit_app(self):
         self.close()

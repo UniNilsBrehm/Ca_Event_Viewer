@@ -11,6 +11,13 @@ class Settings:
     sampling_rate = 1 / sampling_dt
     fbs_percentile = 5
 
+    # Filter Settings
+    # Values in ms (for moving average filter: 0 - 10 000)
+    filter_min = 0
+    filter_max = 10 * 1000
+    filter_interval = 10
+    filter_default = 5 * 1000
+
 
 class PyqtgraphSettings:
     # Global pyqtgraph settings

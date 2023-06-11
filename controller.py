@@ -110,8 +110,19 @@ class Controller(QObject):
         self._start_new_session()
         # self.data_handler.signal_new_data.emit()
 
+        # Add the Filters
+        self.gui.filter_selection_combobox.addItem('Moving Average')
+        self.gui.filter_selection_combobox.setItemData(0, 'moving_average')
+        self.gui.filter_selection_combobox.addItem('High Pass')
+        self.gui.filter_selection_combobox.setItemData(1, 'high_pass')
+        self.gui.filter_selection_combobox.addItem('Low Pass')
+        self.gui.filter_selection_combobox.setItemData(2, 'low_pass')
+        self.gui.filter_selection_combobox.setDisabled(True)
+        self.filter_name = 'moving_average'
+
     def _start_new_session(self):
         self.gui.info_label.setText('Please Open Data File ...')
+        self.gui.filter_selection_combobox.setDisabled(True)
         self.clear_plots()
         self.event_plots = []
         self.show_fbs = False
@@ -157,6 +168,7 @@ class Controller(QObject):
         self.gui.file_menu_action_save_viewer_file.setDisabled(False)
         self.gui.trace_plot_item.setLabel('left', 'Raw', **PlottingStyles.axis_label_styles)
         self.gui.toolbar_fbs_trace_action.setDisabled(False)
+        self.gui.filter_selection_combobox.setDisabled(False)
 
     def plot_design(self):
         self.gui.trace_plot_item.setLabel('bottom', 'Time [s]', **PlottingStyles.axis_label_styles)
@@ -218,6 +230,7 @@ class Controller(QObject):
         self.gui.toolbar_min_max_action.triggered.connect(self._set_to_min_max)
 
         # Filter
+        self.gui.filter_selection_combobox.activated.connect(self.change_filter)
         self.gui.filter_locK_button.clicked.connect(self.lock_filter_slider)
         self.gui.filter_slider.valueChanged.connect(self.filter_slider_changed)
         self.gui.filter_slider.setDisabled(True)
@@ -283,7 +296,8 @@ class Controller(QObject):
 
         # Plot Filtered Trace
         if self.filter_is_active:
-            self.data_handler.moving_average_filter()
+            # self.data_handler.moving_average_filter()
+            self.data_handler.filter_data(filter_name=self.filter_name)
             time_axis = self.data_handler.get_time_axis(self.data_handler.roi_id)
             f_y = self.data_handler.data[self.data_handler.roi_id]['data_traces']['filtered']
             plot_data_item = pg.PlotDataItem(
@@ -708,12 +722,12 @@ class Controller(QObject):
         if file_dir:
             data = pickle.dumps(self.data_handler.data)
             meta_data = pickle.dumps(self.data_handler.meta_data)
-            filter_window = pickle.dumps(self.data_handler.filter_window)
+            filter_settings = pickle.dumps({'parameter': self.data_handler.filter_window, 'type': self.filter_name})
 
             with ZipFile(file_dir, 'w') as zip_object:
                 zip_object.writestr('data.pickle', data)
                 zip_object.writestr('meta_data.pickle', meta_data)
-                zip_object.writestr('filter_window.pickle', filter_window)
+                zip_object.writestr('filter_settings.pickle', filter_settings)
 
     def _load_file(self):
         file_dir = self.get_a_file_dir(default_dir=Settings.default_dir, file_format='viewer file, (*.vf)')
@@ -723,10 +737,10 @@ class Controller(QObject):
                 data = pickle.loads(zip_object.read('data.pickle'))
                 meta_data = pickle.loads(zip_object.read('meta_data.pickle'))
                 try:
-                    filter_window = pickle.loads(zip_object.read('filter_window.pickle'))
+                    filter_settings = pickle.loads(zip_object.read('filter_settings.pickle'))
                 except KeyError:
-                    print('Foun No Filter Settings')
-                    filter_window = None
+                    print('Found No Filter Settings')
+                    filter_settings = None
 
             self.data_handler.load_new_data_set(data=data, meta_data=meta_data)
             self.data_handler.change_roi(self.data_handler.meta_data['roi_list'][0])
@@ -740,8 +754,9 @@ class Controller(QObject):
                 self.gui.toolbar_show_stimulus.setDisabled(True)
                 self.gui.toolbar_show_stimulus_info.setDisabled(True)
 
-            if filter_window is not None:
-                self.data_handler.filter_window = filter_window
+            if filter_settings is not None:
+                self.data_handler.filter_window = filter_settings['parameter']
+                self.filter_name = filter_settings['type']
                 self.gui.filter_slider.setValue(int(self.data_handler.filter_window * 1000))
 
     # ==================================================================================================================
@@ -760,11 +775,14 @@ class Controller(QObject):
             roi_id_nr = roi_id_nr % self.data_handler.get_roi_count()
             roi_id = self.data_handler.meta_data['roi_list'][roi_id_nr]
             self.data_handler.change_roi(roi_id)
-            self.data_handler.moving_average_filter()
+            # self.data_handler.moving_average_filter()
+            self.data_handler.filter_data(filter_name=self.filter_name)
 
     def _set_to_min_max(self):
         self.data_handler.data_norm_mode = 'min_max'
-        self.data_handler.moving_average_filter()
+        # self.data_handler.moving_average_filter()
+        self.data_handler.filter_data(filter_name=self.filter_name)
+
         self.update_plot(update_axis=True)
         self.gui.trace_plot_item.setLabel('left', 'Norm. (min/max)', **PlottingStyles.axis_label_styles)
 
@@ -772,21 +790,27 @@ class Controller(QObject):
         self.data_handler.data_norm_mode = 'df'
         # self.data_handler.change_roi(new_roi=self.data_handler.roi_id)
         # self.plot_traces(update_axis=True)
-        self.data_handler.moving_average_filter()
+        # self.data_handler.moving_average_filter()
+        self.data_handler.filter_data(filter_name=self.filter_name)
+
         self.update_plot(update_axis=True)
         self.gui.trace_plot_item.setLabel('left', 'dF/F', **PlottingStyles.axis_label_styles)
 
     def _set_to_z_score(self):
         self.data_handler.data_norm_mode = 'z'
         # self.plot_traces(update_axis=True)
-        self.data_handler.moving_average_filter()
+        # self.data_handler.moving_average_filter()
+        self.data_handler.filter_data(filter_name=self.filter_name)
+
         self.gui.trace_plot_item.setLabel('left', 'Z-Score (SD)', **PlottingStyles.axis_label_styles)
         self.update_plot(update_axis=True)
 
     def _set_to_raw(self):
         self.data_handler.data_norm_mode = 'raw'
         # self.plot_traces(update_axis=True)
-        self.data_handler.moving_average_filter()
+        # self.data_handler.moving_average_filter()
+        self.data_handler.filter_data(filter_name=self.filter_name)
+
         self.gui.trace_plot_item.setLabel('left', 'Raw', **PlottingStyles.axis_label_styles)
         self.update_plot(update_axis=True)
 
@@ -802,6 +826,10 @@ class Controller(QObject):
             data = self.data_handler.data[roi]['data_traces'][self.data_handler.data_norm_mode]
             min_vals.append(np.min(data))
             max_vals.append(np.max(data))
+            if self.filter_is_active:
+                data = self.data_handler.filtered_trace
+                min_vals.append(np.min(data))
+                max_vals.append(np.max(data))
 
         y_min, y_max = np.min(min_vals), np.max(max_vals)
 
@@ -1001,10 +1029,11 @@ class Controller(QObject):
             'pen_color': rand_color,
             'pen_darker_color': rand_color_darker,
             'hover_pen_color': 'r',
-            'filter_window': self.data_handler.filter_window,
+            'filter_parameter': self.data_handler.filter_window,
             'recording_name': self.data_handler.data_name,
             'sampling_rate': self.data_handler.meta_data['sampling_rate'],
             'norm_mode': self.data_handler.data_norm_mode,
+            'filter_type': self.filter_name,
         })
 
         # add event to data handler
@@ -1050,29 +1079,54 @@ class Controller(QObject):
     # ==================================================================================================================
     # DATA TRACE FILTER HANDLING
     # ------------------------------------------------------------------------------------------------------------------
+    def change_filter(self):
+        # Get the combobox item
+        self.filter_name = self.gui.filter_selection_combobox.currentData()
+        self.filter_slider_changed()
+        self.data_handler.filter_data(filter_name=self.filter_name)
+        self.update_plot()
+
     def lock_filter_slider(self):
         if self.filter_locked:
             # Unlock Filter
             self.gui.filter_slider.setDisabled(False)
+            self.gui.filter_selection_combobox.setDisabled(False)
             self.gui.filter_locK_button.setText('Unlocked')
             self.filter_locked = False
         else:
             # Lock Filter
             self.gui.filter_slider.setDisabled(True)
+            self.gui.filter_selection_combobox.setDisabled(True)
             self.gui.filter_locK_button.setText('Locked')
             self.filter_locked = True
 
     def filter_slider_read(self):
         slider_value = float(self.gui.filter_slider.value())
-        slider_value = slider_value / 1000
         return slider_value
 
     def filter_slider_changed(self):
-        self.data_handler.filter_window = self.filter_slider_read()
-        self.gui.filter_slider_label.setText(f'Filter Window: {self.data_handler.filter_window} s')
+        # Default Value Range: 0 - 10 000
+        filter_value = self.filter_slider_read()
+        fs = self.data_handler.meta_data['sampling_rate']
+        nyquist_freq = fs / 2
+        # self.data_handler.filter_window = self.filter_slider_read()
+
+        if self.filter_name == 'moving_average':
+            # from ms to s
+            self.data_handler.filter_window = filter_value / 1000
+            self.gui.filter_slider_label.setText(f'Filter Window: {self.data_handler.filter_window:.3f} s')
+        elif self.filter_name == 'low_pass':
+            # Norm to 0 - Nyquist Freq.
+            self.data_handler.filter_window = (filter_value / 10000) * nyquist_freq
+            self.gui.filter_slider_label.setText(f'Filter Window: {self.data_handler.filter_window:.3f} Hz')
+        elif self.filter_name == 'high_pass':
+            # Norm to 0 - Nyquist Freq.
+            self.data_handler.filter_window = (filter_value / 10000) * nyquist_freq
+            self.gui.filter_slider_label.setText(f'Filter Window: {self.data_handler.filter_window:.3f} Hz')
 
         # Compute Filter
-        self.data_handler.moving_average_filter()
+        # self.data_handler.moving_average_filter()
+        self.data_handler.filter_data(filter_name=self.filter_name)
 
         # Plot new trace
         self.update_plot()

@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.optimize import curve_fit
+from scipy import signal
 from PyQt6.QtCore import pyqtSignal, QObject
 from settings import Settings
 """
@@ -65,6 +66,20 @@ class DataHandler(QObject):
         self.data_norm_mode = 'raw'
         self.fitter = ExpFitter()
 
+    @staticmethod
+    def butter_filter_design(filter_type, cutoff, fs, order=2):
+        nyq = 0.5 * fs
+        normal_cutoff = cutoff / nyq
+        if normal_cutoff >= 1:
+            normal_cutoff = 0.9999
+        b, a = signal.butter(order, normal_cutoff, btype=filter_type, analog=False)
+        return b, a
+
+    def butter_filter(self, data, filter_type, cutoff, fs, order=2):
+        b, a = self.butter_filter_design(filter_type, cutoff, fs, order=order)
+        y = signal.filtfilt(b, a, data)
+        return y
+
     def convert_events_to_csv(self):
         all_events = []
         for roi in self.meta_data['roi_list']:
@@ -120,9 +135,46 @@ class DataHandler(QObject):
         self.meta_data['stimulus']['end'] = onset_times['end'].to_numpy()
         self.meta_data['stimulus']['info'] = onset_times.iloc[:, 2].to_numpy()
 
+    def filter_data(self, filter_name):
+        if filter_name == 'high_pass':
+            self.compute_high_pass_filter()
+        elif filter_name == 'low_pass':
+            self.compute_low_pass_filter()
+        elif filter_name == 'moving_average':
+            self.moving_average_filter()
+        else:
+            print('ERROR: Could not find Filter Name', filter_name)
+
+    def compute_low_pass_filter(self):
+        if self.data is not None and self.filter_window is not None:
+            cut_off = self.filter_window  # in Hz (0 - Nyquist Hz)
+            data = self.data[self.roi_id][self.data_traces_key][self.data_norm_mode]
+            if cut_off > 0:
+                fs = self.meta_data['sampling_rate']
+                filtered_data = self.butter_filter(data, filter_type='low', cutoff=cut_off, fs=fs, order=2)
+                self.data[self.roi_id][self.data_traces_key]['filtered'] = filtered_data
+                self.filtered_trace = filtered_data
+            else:
+                self.data[self.roi_id][self.data_traces_key]['filtered'] = data
+                self.filtered_trace = data
+
+    def compute_high_pass_filter(self):
+        if self.data is not None and self.filter_window is not None:
+            cut_off = self.filter_window  # in Hz (0 - Nyquist Hz)
+            data = self.data[self.roi_id][self.data_traces_key][self.data_norm_mode]
+            if cut_off > 0:
+                fs = self.meta_data['sampling_rate']
+                filtered_data = self.butter_filter(data, filter_type='high', cutoff=cut_off, fs=fs, order=2)
+                self.data[self.roi_id][self.data_traces_key]['filtered'] = filtered_data
+                self.filtered_trace = filtered_data
+            else:
+                self.data[self.roi_id][self.data_traces_key]['filtered'] = data
+                self.filtered_trace = data
+
     def moving_average_filter(self):
         if self.data is not None and self.filter_window is not None:
-            win = int(self.filter_window * self.meta_data['sampling_rate'])
+            fs = self.meta_data['sampling_rate']
+            win = int(self.filter_window * fs)
             data = self.data[self.roi_id][self.data_traces_key][self.data_norm_mode]
             if win > 0:
                 filtered_data = np.convolve(data, np.ones(win) / win, mode='same')
@@ -134,7 +186,8 @@ class DataHandler(QObject):
 
     def get_filtered_trace(self, roi_id, norm_mode):
         if self.data is not None and self.filter_window is not None:
-            win = int(self.filter_window * self.meta_data['sampling_rate'])
+            fs = self.meta_data['sampling_rate']
+            win = int(self.filter_window * fs)
             trace = self.data[roi_id][self.data_traces_key][norm_mode]
             if win > 0:
                 filtered_data = np.convolve(trace, np.ones(win) / win, mode='same')
