@@ -71,9 +71,9 @@ class MainWindow(QMainWindow):
         # self.shortcut_toolbar_raw_action = QShortcut(QKeySequence('R'), self)
 
         # Normalized Raw F Button
-        # self.toolbar_raw_norm_action = QAction("Norm F", self)
-        # self.toolbar_raw_norm_action.setToolTip("Norm Raw Data (N)")
-        # self.toolbar.addAction(self.toolbar_raw_norm_action)
+        self.toolbar_min_max_action = QAction("Norm F", self)
+        self.toolbar_min_max_action.setToolTip("Norm Raw Data (F1)")
+        self.toolbar.addAction(self.toolbar_min_max_action)
         # self.shortcut_toolbar_raw_norm_action = QShortcut(QKeySequence('N'), self)
 
         # dF/F Button

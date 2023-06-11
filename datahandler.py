@@ -154,6 +154,16 @@ class DataHandler(QObject):
         z_score = self._to_z_score(data_df)
         self.data[roi_id][self.data_traces_key]['z'] = z_score
 
+        # Compute min max norm
+        min_max_norm = self._to_min_max(raw_data=data_trace)
+        self.data[roi_id][self.data_traces_key]['min_max'] = min_max_norm
+
+    @staticmethod
+    def _to_min_max(raw_data):
+        # x = (x- min(x)) / (max(x)-min(x))
+        data_min_max = (raw_data - np.min(raw_data)) / (np.max(raw_data) - np.min(raw_data))
+        return data_min_max
+
     def _to_df_over_f(self, raw_data):
         fbs = np.percentile(raw_data, self.fbs_per, axis=0)
         data_df = (raw_data - fbs) / fbs

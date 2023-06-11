@@ -215,6 +215,7 @@ class Controller(QObject):
         self.gui.toolbar_show_stimulus.triggered.connect(self.plot_stimulus_onsets)
         self.gui.toolbar_show_stimulus_info.triggered.connect(self.stimulus_info_box)
         self.gui.toolbar_fbs_trace_action.triggered.connect(self.toggle_base_line_trace)
+        self.gui.toolbar_min_max_action.triggered.connect(self._set_to_min_max)
 
         # Filter
         self.gui.filter_locK_button.clicked.connect(self.lock_filter_slider)
@@ -761,6 +762,12 @@ class Controller(QObject):
             self.data_handler.change_roi(roi_id)
             self.data_handler.moving_average_filter()
 
+    def _set_to_min_max(self):
+        self.data_handler.data_norm_mode = 'min_max'
+        self.data_handler.moving_average_filter()
+        self.update_plot(update_axis=True)
+        self.gui.trace_plot_item.setLabel('left', 'Norm. (min/max)', **PlottingStyles.axis_label_styles)
+
     def _set_to_df(self):
         self.data_handler.data_norm_mode = 'df'
         # self.data_handler.change_roi(new_roi=self.data_handler.roi_id)
@@ -814,6 +821,7 @@ class Controller(QObject):
         self.gui.next_button.setDisabled(freeze)
         self.gui.prev_button.setDisabled(freeze)
         self.gui.toolbar_raw_action.setDisabled(freeze)
+        self.gui.toolbar_min_max_action.setDisabled(freeze)
         self.gui.toolbar_df_action.setDisabled(freeze)
         self.gui.toolbar_z_score_action.setDisabled(freeze)
         self.gui.toolbar_filter_action.setDisabled(freeze)
@@ -855,6 +863,7 @@ class Controller(QObject):
             self.gui.next_button.setDisabled(True)
             self.gui.prev_button.setDisabled(True)
             self.gui.toolbar_raw_action.setDisabled(True)
+            self.gui.toolbar_min_max_action.setDisabled(True)
             self.gui.toolbar_df_action.setDisabled(True)
             self.gui.toolbar_z_score_action.setDisabled(True)
             self.gui.toolbar_filter_action.setDisabled(True)
@@ -879,6 +888,7 @@ class Controller(QObject):
             self.gui.next_button.setDisabled(False)
             self.gui.prev_button.setDisabled(False)
             self.gui.toolbar_raw_action.setDisabled(False)
+            self.gui.toolbar_min_max_action.setDisabled(False)
             self.gui.toolbar_df_action.setDisabled(False)
             self.gui.toolbar_z_score_action.setDisabled(False)
             self.gui.toolbar_filter_action.setDisabled(False)
@@ -934,7 +944,7 @@ class Controller(QObject):
     def compute_peak_amplitudes(self, idx_min, idx_max, mode='rise'):
         peak_amplitudes = dict()
         if self.filter_is_active:
-            for norm in ['raw', 'df', 'z']:
+            for norm in ['raw', 'min_max', 'df', 'z']:
                 filtered_trace = self.data_handler.get_filtered_trace(self.data_handler.roi_id, norm_mode=norm)
                 min_y = filtered_trace[idx_min]
                 max_y = filtered_trace[idx_max]
