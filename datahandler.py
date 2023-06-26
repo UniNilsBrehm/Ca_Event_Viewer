@@ -2,6 +2,7 @@ import numpy as np
 from scipy.optimize import curve_fit
 from PyQt6.QtCore import pyqtSignal, QObject
 from settings import Settings
+from IPython import embed
 """
 Data Structure:
 .
@@ -208,7 +209,15 @@ class DataHandler(QObject):
         else:
             return 0
 
-    def add_event(self, event_data, event_id, roi_id):
+    def add_event(self, event_data, roi_id):
+        # Reset keys (renumerate)
+        self.data[roi_id][self.events_key] = {i: v for i, v in enumerate(self.data[roi_id][self.events_key].values())}
+
+        cc = self.get_events_count(roi_id)
+        if cc == 0:
+            event_id = 0
+        else:
+            event_id = cc
         self.data[roi_id][self.events_key][event_id] = event_data
 
     def get_event(self, roi_id, event_id):
@@ -241,6 +250,8 @@ class DataHandler(QObject):
     def remove_event(self, roi_id, event_id):
         try:
             del self.data[roi_id][self.events_key][event_id]
+            # Reset keys (renumerate)
+            self.data[roi_id][self.events_key] = {i: v for i, v in enumerate(self.data[roi_id][self.events_key].values())}
         except KeyError:
             pass
 

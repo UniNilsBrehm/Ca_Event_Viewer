@@ -1008,8 +1008,9 @@ class Controller(QObject):
         })
 
         # add event to data handler
-        even_id = self.data_handler.get_events_count(self.data_handler.roi_id)
-        self.data_handler.add_event(event_data=results, event_id=even_id, roi_id=self.data_handler.roi_id)
+        # even_id = self.data_handler.get_events_count(self.data_handler.roi_id)
+        # print(f'Event ID: {even_id}')
+        self.data_handler.add_event(event_data=results, roi_id=self.data_handler.roi_id)
 
         self.update_plot(update_axis=False)
         self.set_collection_mode_color(on=False)
@@ -1037,7 +1038,7 @@ class Controller(QObject):
 
     def remove_event(self, event_id):
         self.hide_event_info_box(event_id, ev=None)
-        event_names = [f'{event_id}_trace', f'event_{event_id}', f'Fit_Rise_{event_id}', f'Fit_Decay_{event_id}']
+        event_names = [f'{event_id}_trace', f'event_{event_id}', f'Fit_Rise_{event_id}', f'Fit_Decay_{event_id}', f'{event_id}_points']
         for event_name in event_names:
             item_list = self.gui.trace_plot_item.items.copy()
             for item in item_list:
