@@ -10,6 +10,7 @@ from datahandler import DataHandler
 from pointcollectors import PointCollectionMode, TauCollectionMode
 from settings import Settings, PyqtgraphSettings, PlottingStyles
 import pyqtgraph as pg
+import pyqtgraph.exporters
 from IPython import embed
 
 
@@ -217,6 +218,7 @@ class Controller(QObject):
         self.gui.toolbar_show_stimulus_info.triggered.connect(self.stimulus_info_box)
         self.gui.toolbar_fbs_trace_action.triggered.connect(self.toggle_base_line_trace)
         self.gui.toolbar_min_max_action.triggered.connect(self._set_to_min_max)
+        self.gui.toolbar_save_figure.triggered.connect(self.save_figure)
 
         # Filter
         self.gui.filter_locK_button.clicked.connect(self.lock_filter_slider)
@@ -618,6 +620,27 @@ class Controller(QObject):
     # ==================================================================================================================
     # I/O
     # ------------------------------------------------------------------------------------------------------------------
+    def save_figure(self):
+        # Set the desired file format
+        file_format = 'JPEG, (*.jpg);; PNG, (*.png);; TIF, (*.tif);; BMP, (*.bmp);; SVG, (*.svg)'
+        # Let the User choose a file
+        file_dir = self.select_save_file_dir(default_dir=Settings.default_dir, file_format=file_format)
+        if file_dir:
+            file_name = os.path.split(file_dir)[1]
+            file_dir = os.path.split(file_dir)[0]
+            # create an exporter instance, as an argument give it
+            # the item you wish to export
+            # exporter = pg.exporters.ImageExporter(plot_item)
+            exporter_data_plot = pg.exporters.ImageExporter(self.gui.plot_graphics_layout_widget.scene())
+            exporter_stimulus_plot = pg.exporters.ImageExporter(self.gui.stimulus_graphics_layout_widget.scene())
+
+            # set export parameters if needed
+            # exporter.parameters()['width'] = 100  # (note this also affects height parameter)
+
+            # save to file
+            exporter_data_plot.export(f'{file_dir}/data_{file_name}')
+            exporter_stimulus_plot.export(f'{file_dir}/stimulus_{file_name}')
+
     def import_single_trace(self):
         # Set the desired file format
         file_format = 'csv file, (*.csv)'

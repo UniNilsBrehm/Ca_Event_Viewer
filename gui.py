@@ -125,6 +125,12 @@ class MainWindow(QMainWindow):
         self.toolbar_show_stimulus_info.setDisabled(True)
         # self.shortcut_toolbar_show_stimulus_info = QShortcut(QKeySequence('J'), self)
 
+        # Save Figure
+        self.toolbar.addSeparator()
+        self.toolbar_save_figure = QAction("Save Figure", self)
+        self.toolbar_save_figure.setToolTip("Save Figure")
+        self.toolbar.addAction(self.toolbar_save_figure)
+
         # The Mouse Position
         self.layout_labels = QHBoxLayout()
         self.mouse_label = QLabel(f"<p style='color:black'>X： {0} <br> Y: {0}</p>")
@@ -225,11 +231,11 @@ class MainWindow(QMainWindow):
         # Add a plot item to initialize plot window
         # Stimulus Plot
         self.stimulus_plot_item = self.stimulus_graphics_layout_widget.addPlot(title='Stimulus', clear=True, name='stimulus')
-        self.stimulus_plot_item.setMenuEnabled(False)
+        # self.stimulus_plot_item.setMenuEnabled(False)
         self.stimulus_plot_item.hideButtons()
         # Data Plot
         self.trace_plot_item = self.plot_graphics_layout_widget.addPlot(title='Ca Data', clear=True, name='data')
-        self.trace_plot_item.setMenuEnabled(False)
+        # self.trace_plot_item.setMenuEnabled(False)
         self.trace_plot_item.hideButtons()
         self.stimulus_plot_item.setXLink(self.trace_plot_item)
 
