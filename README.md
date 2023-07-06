@@ -2,6 +2,9 @@
 Welcome to the experimental branch of the <i>CaEventViewer</i>.
 With the <i>CaEventViewer</i> you can plot and analyze calcium transients from Ca-imaging experiments.
 
+## New Features
+- Import single traces (e.g. stimulus voltage trace)
+- Save Figures (via right-click menu or via Toolbar)
 
 ## Installation
 Before running the "viewer.py" file you should make sure that you have installed all the needed dependencies.
