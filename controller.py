@@ -196,6 +196,7 @@ class Controller(QObject):
         self.gui.file_menu_action_new_session.triggered.connect(self._start_new_session)
         self.gui.file_menu_action_import_traces.triggered.connect(self.import_traces_from_csv)
         self.gui.file_menu_action_import_stimulus.triggered.connect(self.import_stimulus)
+        self.gui.file_menu_action_import_stimulus_trace.triggered.connect(self.import_single_trace)
         self.gui.file_menu_action_noise.triggered.connect(self.export_noise_statistics)
         self.gui.file_menu_action_import_meta_data.triggered.connect(self.import_meta_data)
         self.gui.file_menu_action_save_csv.triggered.connect(self.export_results)
@@ -584,19 +585,77 @@ class Controller(QObject):
             if item.name() == 'stimulus_trace':
                 self.gui.stimulus_plot_item.removeItem(item)
 
-        plot_data_item = pg.PlotDataItem(
-            self.data_handler.meta_data['stimulus']['time'], self.data_handler.meta_data['stimulus']['values'],
-            pen=PlottingStyles.stimulus_pen,
-            # name=f'{self.data_handler.data_name}_ROI{self.data_handler.roi_id}',
-            name=f'stimulus_trace',
-            skipFiniteCheck=True,
-            tip=None,
-        )
-        self.gui.stimulus_plot_item.addItem(plot_data_item)
+        if self.data_handler.meta_data['stimulus']['available']:
+            plot_data_item = pg.PlotDataItem(
+                self.data_handler.meta_data['stimulus']['time'], self.data_handler.meta_data['stimulus']['values'],
+                pen=PlottingStyles.stimulus_pen,
+                # name=f'{self.data_handler.data_name}_ROI{self.data_handler.roi_id}',
+                name=f'stimulus_trace',
+                skipFiniteCheck=True,
+                tip=None,
+            )
+            self.gui.stimulus_plot_item.addItem(plot_data_item)
+
+        # check if there are single traces plotted
+        item_list = self.gui.stimulus_plot_item.items.copy()
+        for item in item_list:
+            if item.name().startswith('single_trace'):
+                self.gui.stimulus_plot_item.removeItem(item)
+
+        if len(self.data_handler.single_traces) > 0:
+            cc = 0
+            for trace in self.data_handler.single_traces:
+                plot_data_item = pg.PlotDataItem(
+                    trace['time'], trace['values'],
+                    pen=PlottingStyles.single_trace_pen,
+                    name=f'single_trace_{cc}',
+                    skipFiniteCheck=True,
+                    tip=None,
+                )
+                self.gui.stimulus_plot_item.addItem(plot_data_item)
+                cc += 1
 
     # ==================================================================================================================
     # I/O
     # ------------------------------------------------------------------------------------------------------------------
+    def import_single_trace(self):
+        # Set the desired file format
+        file_format = 'csv file, (*.csv)'
+        # Let the User choose a file
+        file_dir = self.get_a_file_dir(default_dir=Settings.default_dir, file_format=file_format)
+        if file_dir:
+            stimulus_trace = pd.read_csv(file_dir, index_col=False)
+            if stimulus_trace.shape[1] == 1:
+                # There are only stimulus values but no time axis
+                # Ask for sampling rate
+                sampling_rate_default = str(0.1)
+                sampling_rate_str, ok_pressed = QInputDialog.getText(
+                    self.gui, "Enter dt", "dt [s]:", QLineEdit.EchoMode.Normal, sampling_rate_default)
+                if ok_pressed and sampling_rate_str:
+                    try:
+                        sampling_rate = 1 / float(sampling_rate_str)
+                    except ValueError:
+                        QMessageBox.critical(self.gui, 'ERROR', 'Sampling Rate Must Be a Number!')
+                        return False
+                else:
+                    QMessageBox.critical(self.gui, 'ERROR', 'Please Enter Sampling Rate')
+                    return False
+
+                # Create time axis with sampling rate
+                max_time = stimulus_trace.shape[0] / sampling_rate
+                t = np.linspace(0, max_time, stimulus_trace.shape[0])
+                values = stimulus_trace.iloc[:, 0].to_numpy()
+            else:
+                t = stimulus_trace.iloc[:, 0].to_numpy()
+                values = stimulus_trace.iloc[:, 1].to_numpy()
+
+            # Normalize to 0-1
+            values = (values - np.min(values)) / (np.max(values) - np.min(values))
+
+            # Add single trace to data handler
+            self.data_handler.add_single_trace(t, values)
+            self.plot_stimulus()
+
     def export_results(self):
         file_dir = self.select_save_file_dir(default_dir=Settings.default_dir, file_format='csv, (*.csv)')
         if self.data_handler.data is not None and file_dir:

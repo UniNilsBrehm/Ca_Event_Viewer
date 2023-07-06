@@ -65,6 +65,7 @@ class DataHandler(QObject):
         self.filtered_trace = None
         self.data_norm_mode = 'raw'
         self.fitter = ExpFitter()
+        self.single_traces = []
 
     def convert_events_to_csv(self):
         all_events = []
@@ -142,6 +143,9 @@ class DataHandler(QObject):
                 return filtered_data
             else:
                 return None
+
+    def add_single_trace(self, trace_time, trace_values):
+        self.single_traces.append({'time': trace_time, 'values': trace_values})
 
     def add_data_trace(self, data_trace, data_trace_name, roi_id):
         self.data[roi_id][self.data_traces_key][data_trace_name] = data_trace

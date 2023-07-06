@@ -36,6 +36,7 @@ class PlottingStyles:
     line_pen = pg.mkPen(line_style)
     line_pen_transparent = pg.mkPen(line_style_transparent)
     stimulus_pen = pg.mkPen(color='b')
+    single_trace_pen = pg.mkPen(color='k')
 
     collecting_mode_bg = (255, 250, 250)
     line_filtered_pen = pg.mkPen({'color': 'r', 'width': 1})

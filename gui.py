@@ -203,6 +203,7 @@ class MainWindow(QMainWindow):
         self.file_menu.addSeparator()
         self.file_menu_action_import_traces = self.file_menu.addAction('Import Data Traces (ctrl+i)')
         self.file_menu_action_import_stimulus = self.file_menu.addAction('Import Stimulus (ctrl+b)')
+        self.file_menu_action_import_stimulus_trace = self.file_menu.addAction('Import Stimulus Trace')
         self.file_menu_action_import_meta_data = self.file_menu.addAction('Import Meta Data (ctrl+m)')
         self.file_menu.addSeparator()
         self.file_menu_action_save_csv = self.file_menu.addAction('Export Results to .csv (ctrl+e)')
