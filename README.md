@@ -1,5 +1,5 @@
 # CaEventAnalyzer
-Welcome to <i>CaEventViewer</i>.
+Welcome to the experimental branch of the <i>CaEventViewer</i>.
 With the <i>CaEventViewer</i> you can plot and analyze calcium transients from Ca-imaging experiments.
 
 
