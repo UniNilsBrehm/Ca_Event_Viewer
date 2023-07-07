@@ -49,6 +49,7 @@ class DataHandler(QObject):
         # Create a dictionary where each roi is a key with a default dictionary that will later contain all the data
         self.data_traces_key = 'data_traces'
         self.events_key = 'events'
+        self.stimulus_traces_key = 'stimulus_trace'
         self.data = None
         self.meta_data = dict()
         self.meta_data['meta_data'] = None
@@ -66,7 +67,6 @@ class DataHandler(QObject):
         self.data_norm_mode = 'raw'
         self.fitter = ExpFitter()
         # self.single_traces = []
-        self.single_traces = dict()
 
     def convert_events_to_csv(self):
         all_events = []
@@ -145,15 +145,14 @@ class DataHandler(QObject):
             else:
                 return None
 
-    def add_single_trace(self, trace_time, trace_values):
-        # self.single_traces must be a list!
-        self.single_traces.append({'time': trace_time, 'values': trace_values})
-
-    def set_roi_single_traces(self, traces):
-        # self.single_traces must be a dict!
-        self.single_traces = traces.copy()
+    def add_roi_stimulus_trace(self, roi_id, trace_time, trace_values):
+        if self.stimulus_traces_key not in self.data[roi_id]:
+            self.data[roi_id][self.stimulus_traces_key] = dict()
+        self.data[roi_id][self.stimulus_traces_key]['Time'] = trace_time
+        self.data[roi_id][self.stimulus_traces_key]['Values'] = trace_values
 
     def add_data_trace(self, data_trace, data_trace_name, roi_id):
+        # self.data[ROI_2]['data_traces']['raw']
         self.data[roi_id][self.data_traces_key][data_trace_name] = data_trace
 
         # Compute delta f over f
@@ -209,7 +208,7 @@ class DataHandler(QObject):
         self.meta_data['roi_list'] = roi_list
         self.data = dict().fromkeys(roi_list)
         for key in self.data:
-            self.data[key] = {self.data_traces_key: {}, self.events_key: {}}
+            self.data[key] = {self.data_traces_key: {}, self.events_key: {}, self.stimulus_traces_key: {}}
         self.data_name = data_name
         self.meta_data['sampling_rate'] = sampling_rate
 

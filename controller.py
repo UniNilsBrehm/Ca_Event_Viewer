@@ -593,16 +593,19 @@ class Controller(QObject):
             if item.name() == 'single_trace':
                 self.gui.stimulus_plot_item.removeItem(item)
 
-        if len(self.data_handler.single_traces) > 0:
-            d = self.data_handler.single_traces[self.data_handler.roi_id]
-            plot_data_item = pg.PlotDataItem(
-                self.data_handler.single_traces['Time'], d,
-                pen=PlottingStyles.single_trace_pen,
-                name=f'single_trace',
-                skipFiniteCheck=True,
-                tip=None,
-            )
-            self.gui.stimulus_plot_item.addItem(plot_data_item)
+        if 'stimulus_trace' in self.data_handler.data[self.data_handler.roi_id]:
+            if len(self.data_handler.data[self.data_handler.roi_id]['stimulus_trace']) > 0:
+                # d = self.data_handler.single_traces[self.data_handler.roi_id]
+                d = self.data_handler.data[self.data_handler.roi_id]['stimulus_trace']['Values']
+                t = self.data_handler.data[self.data_handler.roi_id]['stimulus_trace']['Time']
+                plot_data_item = pg.PlotDataItem(
+                    t, d,
+                    pen=PlottingStyles.single_trace_pen,
+                    name=f'single_trace',
+                    skipFiniteCheck=True,
+                    tip=None,
+                )
+                self.gui.stimulus_plot_item.addItem(plot_data_item)
 
     def plot_stimulus(self):
         # check if there is already a plotted trace
@@ -677,7 +680,7 @@ class Controller(QObject):
             if file_dir:
                 stimulus_trace = pd.read_csv(file_dir, index_col=False)
                 headers = list(stimulus_trace.keys())
-                if 'Time' in headers:
+                if 'Time' in headers or 'time' in headers:
                     # There is a time axis
                     data = stimulus_trace.loc[:, stimulus_trace.columns != 'Time'].to_dict(orient='list')
                     # Check if ROIS match ROIS from data traces
@@ -685,7 +688,8 @@ class Controller(QObject):
                     if not check:
                         QMessageBox.critical(self.gui, 'ERROR', 'ROIs do not match!')
                         return False
-                    data['Time'] = stimulus_trace['Time'].to_list()
+                    # data['Time'] = stimulus_trace['Time'].to_list()
+                    t = stimulus_trace['Time'].to_list()
                 else:
                     # There is no time axis
                     # Ask for sampling rate
@@ -695,15 +699,17 @@ class Controller(QObject):
                     if ok_pressed and sampling_rate_str:
                         try:
                             sampling_rate = 1 / float(sampling_rate_str)
+                            sampling_dt = float(sampling_rate_str)
                         except ValueError:
-                            QMessageBox.critical(self.gui, 'ERROR', 'Sampling Rate Must Be a Number!')
+                            QMessageBox.critical(self.gui, 'ERROR', 'Sampling dt Must Be a Number!')
                             return False
                     else:
-                        QMessageBox.critical(self.gui, 'ERROR', 'Please Enter Sampling Rate')
+                        QMessageBox.critical(self.gui, 'ERROR', 'Please Enter Sampling dt')
                         return False
 
                     # Create time axis with sampling rate
-                    max_time = stimulus_trace.shape[0] / sampling_rate
+                    # max_time = stimulus_trace.shape[0] / sampling_rate
+                    max_time = stimulus_trace.shape[0] * sampling_dt
                     data = stimulus_trace.to_dict(orient='list')
                     # Check if ROIS match ROIS from data traces
                     check = self.data_handler.meta_data['roi_list'] == list(data.keys())
@@ -711,10 +717,12 @@ class Controller(QObject):
                         QMessageBox.critical(self.gui, 'ERROR', 'ROIs do not match!')
                         return False
 
-                    data['Time'] = np.linspace(0, max_time, stimulus_trace.shape[0])
+                    # data['Time'] = np.linspace(0, max_time, stimulus_trace.shape[0])
+                    t = np.linspace(0, max_time, stimulus_trace.shape[0])
 
                 # Add single traces to data handler
-                self.data_handler.set_roi_single_traces(data)
+                for trace_key in data:
+                    self.data_handler.add_roi_stimulus_trace(roi_id=trace_key, trace_time=t, trace_values=data[trace_key])
                 self.plot_single_traces()
         else:
             QMessageBox.critical(self.gui, 'ERROR', 'Please Import Data Traces First!')
@@ -867,13 +875,11 @@ class Controller(QObject):
         file_dir = self.select_save_file_dir(default_dir=Settings.default_dir, file_format='viewer file, (*.vf)')
         if file_dir:
             data = pickle.dumps(self.data_handler.data)
-            single_traces = pickle.dumps(self.data_handler.single_traces)
             meta_data = pickle.dumps(self.data_handler.meta_data)
             filter_window = pickle.dumps(self.data_handler.filter_window)
 
             with ZipFile(file_dir, 'w') as zip_object:
                 zip_object.writestr('data.pickle', data)
-                zip_object.writestr('single_traces.pickle', single_traces)
                 zip_object.writestr('meta_data.pickle', meta_data)
                 zip_object.writestr('filter_window.pickle', filter_window)
 
@@ -883,7 +889,6 @@ class Controller(QObject):
             self._start_new_session()
             with ZipFile(file_dir, 'r') as zip_object:
                 data = pickle.loads(zip_object.read('data.pickle'))
-                single_traces = pickle.loads(zip_object.read('single_traces.pickle'))
                 meta_data = pickle.loads(zip_object.read('meta_data.pickle'))
                 try:
                     filter_window = pickle.loads(zip_object.read('filter_window.pickle'))
@@ -892,12 +897,12 @@ class Controller(QObject):
                     filter_window = None
 
             self.data_handler.load_new_data_set(data=data, meta_data=meta_data)
-            self.data_handler.set_roi_single_traces(single_traces)
             self.data_handler.change_roi(self.data_handler.meta_data['roi_list'][0])
             self.prepare_new_data()
 
-            if len(single_traces) > 0:
-                self.plot_single_traces()
+            if 'stimulus_trace' in self.data_handler.data[self.data_handler.roi_id]:
+                if len(self.data_handler.data[self.data_handler.roi_id]['stimulus_trace']) > 0:
+                    self.plot_single_traces()
 
             if self.data_handler.meta_data['stimulus']['available']:
                 self.plot_stimulus()
