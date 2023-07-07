@@ -3,15 +3,16 @@ import pickle
 from zipfile import ZipFile
 import numpy as np
 import pandas as pd
-from PyQt6.QtGui import QShortcut, QKeySequence, QFont
-from PyQt6.QtWidgets import QFileDialog, QInputDialog, QLineEdit, QMessageBox
-from PyQt6.QtCore import pyqtSignal, QObject, Qt
+from PyQt6.QtGui import QShortcut, QKeySequence, QFont, QPainter, QPdfWriter, QPageSize
+from PyQt6.QtWidgets import QFileDialog, QInputDialog, QLineEdit, QMessageBox, QGraphicsItem, QApplication
+from PyQt6.QtCore import pyqtSignal, QObject, Qt, QMarginsF, QSizeF, QRectF, QT_VERSION
 from datahandler import DataHandler
 from pointcollectors import PointCollectionMode, TauCollectionMode
 from settings import Settings, PyqtgraphSettings, PlottingStyles
 import pyqtgraph as pg
 import pyqtgraph.exporters
 from IPython import embed
+from pyqtgraph.exporters.Exporter import Exporter
 
 
 class MyTextItem(pg.TextItem):
@@ -148,6 +149,7 @@ class Controller(QObject):
         self.gui.filter_locK_button.setDisabled(True)
         self.gui.filter_slider.setDisabled(True)
         rois = np.array(self.data_handler.meta_data['roi_list']).astype(str)
+        self.gui.roi_selection_combobox.clear()
         for k, r in zip(range(len(rois)), rois):
             self.gui.roi_selection_combobox.addItem(str(k))
             self.gui.roi_selection_combobox.setItemData(k, r)
@@ -425,6 +427,9 @@ class Controller(QObject):
             )
             self.gui.trace_plot_item.addItem(plot_data_item)
 
+        # Plot ROI Single Traces (e.g. stimulus traces)
+        self.plot_single_traces()
+
     def clear_plots(self):
         self.gui.trace_plot_item.clear()
         self.gui.stimulus_plot_item.clear()
@@ -580,6 +585,25 @@ class Controller(QObject):
         # Flip the switch
         self.stimulus_onsets_visible = np.invert(self.stimulus_onsets_visible)
 
+    def plot_single_traces(self):
+        # PLOT SINGLE TRACES
+        # check if there are single traces plotted
+        item_list = self.gui.stimulus_plot_item.items.copy()
+        for item in item_list:
+            if item.name() == 'single_trace':
+                self.gui.stimulus_plot_item.removeItem(item)
+
+        if len(self.data_handler.single_traces) > 0:
+            d = self.data_handler.single_traces[self.data_handler.roi_id]
+            plot_data_item = pg.PlotDataItem(
+                self.data_handler.single_traces['Time'], d,
+                pen=PlottingStyles.single_trace_pen,
+                name=f'single_trace',
+                skipFiniteCheck=True,
+                tip=None,
+            )
+            self.gui.stimulus_plot_item.addItem(plot_data_item)
+
     def plot_stimulus(self):
         # check if there is already a plotted trace
         item_list = self.gui.stimulus_plot_item.items.copy()
@@ -598,24 +622,25 @@ class Controller(QObject):
             )
             self.gui.stimulus_plot_item.addItem(plot_data_item)
 
+        # PLOT SINGLE TRACES
         # check if there are single traces plotted
-        item_list = self.gui.stimulus_plot_item.items.copy()
-        for item in item_list:
-            if item.name().startswith('single_trace'):
-                self.gui.stimulus_plot_item.removeItem(item)
-
-        if len(self.data_handler.single_traces) > 0:
-            cc = 0
-            for trace in self.data_handler.single_traces:
-                plot_data_item = pg.PlotDataItem(
-                    trace['time'], trace['values'],
-                    pen=PlottingStyles.single_trace_pen,
-                    name=f'single_trace_{cc}',
-                    skipFiniteCheck=True,
-                    tip=None,
-                )
-                self.gui.stimulus_plot_item.addItem(plot_data_item)
-                cc += 1
+        # item_list = self.gui.stimulus_plot_item.items.copy()
+        # for item in item_list:
+        #     if item.name().startswith('single_trace'):
+        #         self.gui.stimulus_plot_item.removeItem(item)
+        #
+        # if len(self.data_handler.single_traces) > 0:
+        #     cc = 0
+        #     for trace in self.data_handler.single_traces:
+        #         plot_data_item = pg.PlotDataItem(
+        #             trace['time'], trace['values'],
+        #             pen=PlottingStyles.single_trace_pen,
+        #             name=f'single_trace_{cc}',
+        #             skipFiniteCheck=True,
+        #             tip=None,
+        #         )
+        #         self.gui.stimulus_plot_item.addItem(plot_data_item)
+        #         cc += 1
 
     # ==================================================================================================================
     # I/O
@@ -623,6 +648,8 @@ class Controller(QObject):
     def save_figure(self):
         # Set the desired file format
         file_format = 'JPEG, (*.jpg);; PNG, (*.png);; TIF, (*.tif);; BMP, (*.bmp);; SVG, (*.svg)'
+        # file_format = 'PDF, (*.pdf))'
+
         # Let the User choose a file
         file_dir = self.select_save_file_dir(default_dir=Settings.default_dir, file_format=file_format)
         if file_dir:
@@ -642,42 +669,93 @@ class Controller(QObject):
             exporter_stimulus_plot.export(f'{file_dir}/stimulus_{file_name}')
 
     def import_single_trace(self):
-        # Set the desired file format
-        file_format = 'csv file, (*.csv)'
-        # Let the User choose a file
-        file_dir = self.get_a_file_dir(default_dir=Settings.default_dir, file_format=file_format)
-        if file_dir:
-            stimulus_trace = pd.read_csv(file_dir, index_col=False)
-            if stimulus_trace.shape[1] == 1:
-                # There are only stimulus values but no time axis
-                # Ask for sampling rate
-                sampling_rate_default = str(0.1)
-                sampling_rate_str, ok_pressed = QInputDialog.getText(
-                    self.gui, "Enter dt", "dt [s]:", QLineEdit.EchoMode.Normal, sampling_rate_default)
-                if ok_pressed and sampling_rate_str:
-                    try:
-                        sampling_rate = 1 / float(sampling_rate_str)
-                    except ValueError:
-                        QMessageBox.critical(self.gui, 'ERROR', 'Sampling Rate Must Be a Number!')
+        if self.data_handler.data is not None:
+            # Set the desired file format
+            file_format = 'csv file, (*.csv)'
+            # Let the User choose a file
+            file_dir = self.get_a_file_dir(default_dir=Settings.default_dir, file_format=file_format)
+            if file_dir:
+                stimulus_trace = pd.read_csv(file_dir, index_col=False)
+                headers = list(stimulus_trace.keys())
+                if 'Time' in headers:
+                    # There is a time axis
+                    data = stimulus_trace.loc[:, stimulus_trace.columns != 'Time'].to_dict(orient='list')
+                    # Check if ROIS match ROIS from data traces
+                    check = self.data_handler.meta_data['roi_list'] == list(data.keys())
+                    if not check:
+                        QMessageBox.critical(self.gui, 'ERROR', 'ROIs do not match!')
                         return False
+                    data['Time'] = stimulus_trace['Time'].to_list()
                 else:
-                    QMessageBox.critical(self.gui, 'ERROR', 'Please Enter Sampling Rate')
-                    return False
+                    # There is no time axis
+                    # Ask for sampling rate
+                    sampling_rate_default = str(0.1)
+                    sampling_rate_str, ok_pressed = QInputDialog.getText(
+                        self.gui, "Enter dt", "dt [s]:", QLineEdit.EchoMode.Normal, sampling_rate_default)
+                    if ok_pressed and sampling_rate_str:
+                        try:
+                            sampling_rate = 1 / float(sampling_rate_str)
+                        except ValueError:
+                            QMessageBox.critical(self.gui, 'ERROR', 'Sampling Rate Must Be a Number!')
+                            return False
+                    else:
+                        QMessageBox.critical(self.gui, 'ERROR', 'Please Enter Sampling Rate')
+                        return False
 
-                # Create time axis with sampling rate
-                max_time = stimulus_trace.shape[0] / sampling_rate
-                t = np.linspace(0, max_time, stimulus_trace.shape[0])
-                values = stimulus_trace.iloc[:, 0].to_numpy()
-            else:
-                t = stimulus_trace.iloc[:, 0].to_numpy()
-                values = stimulus_trace.iloc[:, 1].to_numpy()
+                    # Create time axis with sampling rate
+                    max_time = stimulus_trace.shape[0] / sampling_rate
+                    data = stimulus_trace.to_dict(orient='list')
+                    # Check if ROIS match ROIS from data traces
+                    check = self.data_handler.meta_data['roi_list'] == list(data.keys())
+                    if not check:
+                        QMessageBox.critical(self.gui, 'ERROR', 'ROIs do not match!')
+                        return False
 
-            # Normalize to 0-1
-            values = (values - np.min(values)) / (np.max(values) - np.min(values))
+                    data['Time'] = np.linspace(0, max_time, stimulus_trace.shape[0])
 
-            # Add single trace to data handler
-            self.data_handler.add_single_trace(t, values)
-            self.plot_stimulus()
+                # Add single traces to data handler
+                self.data_handler.set_roi_single_traces(data)
+                self.plot_single_traces()
+        else:
+            QMessageBox.critical(self.gui, 'ERROR', 'Please Import Data Traces First!')
+
+    # def import_single_trace2(self):
+    #     # Set the desired file format
+    #     file_format = 'csv file, (*.csv)'
+    #     # Let the User choose a file
+    #     file_dir = self.get_a_file_dir(default_dir=Settings.default_dir, file_format=file_format)
+    #     if file_dir:
+    #         stimulus_trace = pd.read_csv(file_dir, index_col=False)
+    #         if stimulus_trace.shape[1] == 1:
+    #             # There are only stimulus values but no time axis
+    #             # Ask for sampling rate
+    #             sampling_rate_default = str(0.1)
+    #             sampling_rate_str, ok_pressed = QInputDialog.getText(
+    #                 self.gui, "Enter dt", "dt [s]:", QLineEdit.EchoMode.Normal, sampling_rate_default)
+    #             if ok_pressed and sampling_rate_str:
+    #                 try:
+    #                     sampling_rate = 1 / float(sampling_rate_str)
+    #                 except ValueError:
+    #                     QMessageBox.critical(self.gui, 'ERROR', 'Sampling Rate Must Be a Number!')
+    #                     return False
+    #             else:
+    #                 QMessageBox.critical(self.gui, 'ERROR', 'Please Enter Sampling Rate')
+    #                 return False
+    #
+    #             # Create time axis with sampling rate
+    #             max_time = stimulus_trace.shape[0] / sampling_rate
+    #             t = np.linspace(0, max_time, stimulus_trace.shape[0])
+    #             values = stimulus_trace.iloc[:, 0].to_numpy()
+    #         else:
+    #             t = stimulus_trace.iloc[:, 0].to_numpy()
+    #             values = stimulus_trace.iloc[:, 1].to_numpy()
+    #
+    #         # Normalize to 0-1
+    #         values = (values - np.min(values)) / (np.max(values) - np.min(values))
+    #
+    #         # Add single trace to data handler
+    #         self.data_handler.add_single_trace(t, values)
+    #         self.plot_stimulus()
 
     def export_results(self):
         file_dir = self.select_save_file_dir(default_dir=Settings.default_dir, file_format='csv, (*.csv)')
@@ -789,11 +867,13 @@ class Controller(QObject):
         file_dir = self.select_save_file_dir(default_dir=Settings.default_dir, file_format='viewer file, (*.vf)')
         if file_dir:
             data = pickle.dumps(self.data_handler.data)
+            single_traces = pickle.dumps(self.data_handler.single_traces)
             meta_data = pickle.dumps(self.data_handler.meta_data)
             filter_window = pickle.dumps(self.data_handler.filter_window)
 
             with ZipFile(file_dir, 'w') as zip_object:
                 zip_object.writestr('data.pickle', data)
+                zip_object.writestr('single_traces.pickle', single_traces)
                 zip_object.writestr('meta_data.pickle', meta_data)
                 zip_object.writestr('filter_window.pickle', filter_window)
 
@@ -803,6 +883,7 @@ class Controller(QObject):
             self._start_new_session()
             with ZipFile(file_dir, 'r') as zip_object:
                 data = pickle.loads(zip_object.read('data.pickle'))
+                single_traces = pickle.loads(zip_object.read('single_traces.pickle'))
                 meta_data = pickle.loads(zip_object.read('meta_data.pickle'))
                 try:
                     filter_window = pickle.loads(zip_object.read('filter_window.pickle'))
@@ -811,8 +892,12 @@ class Controller(QObject):
                     filter_window = None
 
             self.data_handler.load_new_data_set(data=data, meta_data=meta_data)
+            self.data_handler.set_roi_single_traces(single_traces)
             self.data_handler.change_roi(self.data_handler.meta_data['roi_list'][0])
             self.prepare_new_data()
+
+            if len(single_traces) > 0:
+                self.plot_single_traces()
 
             if self.data_handler.meta_data['stimulus']['available']:
                 self.plot_stimulus()
