@@ -3,8 +3,9 @@ Welcome to the experimental branch of the <i>CaEventViewer</i>.
 With the <i>CaEventViewer</i> you can plot and analyze calcium transients from Ca-imaging experiments.
 
 ## New Features
-- Import single traces (e.g. stimulus voltage trace)
+- Import single stimulus traces for each ROI (e.g. stimulus voltage trace); Must have the same format as the ROI data traces
 - Save Figures (via right-click menu or via Toolbar)
+- Fixed ROI Combo Box Bug
 
 ## Installation
 Before running the "viewer.py" file you should make sure that you have installed all the needed dependencies.
