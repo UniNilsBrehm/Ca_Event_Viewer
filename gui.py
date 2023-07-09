@@ -217,8 +217,11 @@ class MainWindow(QMainWindow):
         self.file_menu.addSeparator()
         self.file_menu_action_noise = self.file_menu.addAction('Compute Noise Statistics')
         self.file_menu.addSeparator()
-
         self.file_menu_action_exit = self.file_menu.addAction('Exit')
+
+        # Video Menu
+        self.video_menu = self.menu.addMenu("&Video")
+        self.video_menu_action_open_video_viewer = self.video_menu.addAction('Open Video Viewer')
 
     def _setup_plot(self):
         # pyqtgraph graphic widget (for plotting later)

@@ -3,16 +3,16 @@ import pickle
 from zipfile import ZipFile
 import numpy as np
 import pandas as pd
-from PyQt6.QtGui import QShortcut, QKeySequence, QFont, QPainter, QPdfWriter, QPageSize
-from PyQt6.QtWidgets import QFileDialog, QInputDialog, QLineEdit, QMessageBox, QGraphicsItem, QApplication
-from PyQt6.QtCore import pyqtSignal, QObject, Qt, QMarginsF, QSizeF, QRectF, QT_VERSION
+from PyQt6.QtGui import QShortcut, QKeySequence, QFont
+from PyQt6.QtWidgets import QInputDialog, QLineEdit, QMessageBox, QFileDialog
+from PyQt6.QtCore import pyqtSignal, QObject, Qt
 from datahandler import DataHandler
 from pointcollectors import PointCollectionMode, TauCollectionMode
 from settings import Settings, PyqtgraphSettings, PlottingStyles
 import pyqtgraph as pg
 import pyqtgraph.exporters
 from IPython import embed
-from pyqtgraph.exporters.Exporter import Exporter
+from video_viewer import VideoViewer
 
 
 class MyTextItem(pg.TextItem):
@@ -92,6 +92,9 @@ class Controller(QObject):
     def __init__(self, gui):
         QObject.__init__(self)
         self.gui = gui
+        self.video_viewer = VideoViewer()
+        self.video_match = False
+        self.video_connected = False
         self.gui.closeEvent = self.closeEvent
         self.plot_design()
         self.connections()
@@ -207,6 +210,12 @@ class Controller(QObject):
         self.gui.file_menu_action_save_viewer_file.triggered.connect(self._save_file)
         self.gui.file_menu_action_exit.triggered.connect(self.gui.exit_app)
 
+        # Video Menu
+        self.gui.video_menu_action_open_video_viewer.triggered.connect(self.open_video_viewer)
+        self.video_viewer.FrameChanged.connect(self.plot_video_pos)
+        # self.video_viewer.VideoLoaded.connect(self.check_video)
+        self.video_viewer.ConnectToDataTrace.connect(self.connect_video_to_data_trace)
+
         # Buttons
         self.gui.next_button.clicked.connect(self._next_roi)
         self.gui.prev_button.clicked.connect(self._prev_roi)
@@ -255,6 +264,11 @@ class Controller(QObject):
         else:
             self.shortcut_next_roi.activated.disconnect()
             self.shortcut_prev_roi.activated.disconnect()
+
+    def connect_video_to_data_trace(self, sig):
+        self.video_connected = sig
+        self.check_video()
+        self.plot_video_pos()
 
     # ==================================================================================================================
     # PLOTTING
@@ -429,6 +443,36 @@ class Controller(QObject):
 
         # Plot ROI Single Traces (e.g. stimulus traces)
         self.plot_single_traces()
+
+    def plot_video_pos(self):
+        # check if there is already a plotted video point
+        item_list = self.gui.trace_plot_item.items.copy()
+        for item in item_list:
+            if item.name() == 'video_point':
+                self.gui.trace_plot_item.removeItem(item)
+
+        if self.video_viewer.isEnabled() and self.video_connected and self.data_handler.data is not None:
+            self.check_video()
+            if self.video_match:
+                # time_axis = self.data_handler.get_time_axis(self.data_handler.roi_id)
+                if self.filter_is_active:
+                    y_data = self.data_handler.data[self.data_handler.roi_id]['data_traces']['filtered']
+                else:
+                    y_data = self.data_handler.data[self.data_handler.roi_id]['data_traces'][self.data_handler.data_norm_mode]
+                # Get current video frame
+                current_video_frame = self.video_viewer.current_frame
+                y_point = y_data[current_video_frame]
+                scatter_item = pg.ScatterPlotItem(
+                    [current_video_frame], [y_point],
+                    symbol='o',
+                    pen=pg.mkPen(color='r', width=2),
+                    brush=pg.mkBrush(color='r'),
+                    size=15,
+                    name=f'video_point',
+                    skipFiniteCheck=True,
+                    tip=None,
+                )
+                self.gui.trace_plot_item.addItem(scatter_item)
 
     def clear_plots(self):
         self.gui.trace_plot_item.clear()
@@ -727,44 +771,6 @@ class Controller(QObject):
         else:
             QMessageBox.critical(self.gui, 'ERROR', 'Please Import Data Traces First!')
 
-    # def import_single_trace2(self):
-    #     # Set the desired file format
-    #     file_format = 'csv file, (*.csv)'
-    #     # Let the User choose a file
-    #     file_dir = self.get_a_file_dir(default_dir=Settings.default_dir, file_format=file_format)
-    #     if file_dir:
-    #         stimulus_trace = pd.read_csv(file_dir, index_col=False)
-    #         if stimulus_trace.shape[1] == 1:
-    #             # There are only stimulus values but no time axis
-    #             # Ask for sampling rate
-    #             sampling_rate_default = str(0.1)
-    #             sampling_rate_str, ok_pressed = QInputDialog.getText(
-    #                 self.gui, "Enter dt", "dt [s]:", QLineEdit.EchoMode.Normal, sampling_rate_default)
-    #             if ok_pressed and sampling_rate_str:
-    #                 try:
-    #                     sampling_rate = 1 / float(sampling_rate_str)
-    #                 except ValueError:
-    #                     QMessageBox.critical(self.gui, 'ERROR', 'Sampling Rate Must Be a Number!')
-    #                     return False
-    #             else:
-    #                 QMessageBox.critical(self.gui, 'ERROR', 'Please Enter Sampling Rate')
-    #                 return False
-    #
-    #             # Create time axis with sampling rate
-    #             max_time = stimulus_trace.shape[0] / sampling_rate
-    #             t = np.linspace(0, max_time, stimulus_trace.shape[0])
-    #             values = stimulus_trace.iloc[:, 0].to_numpy()
-    #         else:
-    #             t = stimulus_trace.iloc[:, 0].to_numpy()
-    #             values = stimulus_trace.iloc[:, 1].to_numpy()
-    #
-    #         # Normalize to 0-1
-    #         values = (values - np.min(values)) / (np.max(values) - np.min(values))
-    #
-    #         # Add single trace to data handler
-    #         self.data_handler.add_single_trace(t, values)
-    #         self.plot_stimulus()
-
     def export_results(self):
         file_dir = self.select_save_file_dir(default_dir=Settings.default_dir, file_format='csv, (*.csv)')
         if self.data_handler.data is not None and file_dir:
@@ -919,6 +925,20 @@ class Controller(QObject):
     # ==================================================================================================================
     # GUI AND DATA HANDLING
     # ------------------------------------------------------------------------------------------------------------------
+    def open_video_viewer(self):
+        self.video_viewer.show()
+
+    def check_video(self):
+        if self.video_connected:
+            if self.video_viewer.total_frames == self.data_handler.get_roi_data_trace_size(self.data_handler.roi_id):
+                self.video_match = True
+            else:
+                self.video_match = False
+                self.video_connected = False
+                self.video_viewer.connect_to_data_trace()
+                QMessageBox.critical(self.gui, 'WARNING', 'Video frame number and data trace sample size DO NOT MATCH! \n'
+                                                          'Cannot connect video to data trace')
+
     def _next_roi(self):
         if self.data_handler.data is not None:
             roi_id_nr = self.data_handler.get_roi_index() + 1

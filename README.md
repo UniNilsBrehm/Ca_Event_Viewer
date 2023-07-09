@@ -3,6 +3,7 @@ Welcome to the experimental branch of the <i>CaEventViewer</i>.
 With the <i>CaEventViewer</i> you can plot and analyze calcium transients from Ca-imaging experiments.
 
 ## New Features
+- Now with a Video/Tiff Viewer that can connect the video to the ROI Data Trace to visualize what is happening!
 - Import single stimulus traces for each ROI (e.g. stimulus voltage trace); Must have the same format as the ROI data traces
 - Save Figures (via right-click menu or via Toolbar)
 - Fixed ROI Combo Box Bug

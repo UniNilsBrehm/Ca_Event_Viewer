@@ -239,6 +239,12 @@ class DataHandler(QObject):
     def get_roi_events(self, roi_id):
         return self.data[roi_id][self.events_key]
 
+    def get_roi_data_trace_size(self, roi_id):
+        if self.data is not None:
+            return self.data[roi_id][self.data_traces_key][self.data_norm_mode].shape[0]
+        else:
+            return None
+
     def get_data(self, roi_id=-1):
         if roi_id == -1:
             # return the entire data set
