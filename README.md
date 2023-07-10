@@ -18,6 +18,7 @@ pip install pandas
 pip install scipy
 pip install PyQt6
 pip install pyqtgraph
+pip install opencv-python
 ```
 
 To start the Viewer, open your <i>terminal</i> of choice and go to the directory containing the files.
