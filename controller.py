@@ -8,11 +8,12 @@ from PyQt6.QtWidgets import QInputDialog, QLineEdit, QMessageBox, QFileDialog
 from PyQt6.QtCore import pyqtSignal, QObject, Qt
 from datahandler import DataHandler
 from pointcollectors import PointCollectionMode, TauCollectionMode
-from settings import Settings, PyqtgraphSettings, PlottingStyles
+from settings import Settings, PyqtgraphSettings, PlottingStyles, SettingsFile
 import pyqtgraph as pg
 import pyqtgraph.exporters
 from IPython import embed
 from video_viewer import VideoViewer
+from video_converter import VideoConverter
 
 
 class MyTextItem(pg.TextItem):
@@ -91,11 +92,21 @@ class Controller(QObject):
     # ------------------------------------------------------------------------------------------------------------------
     def __init__(self, gui):
         QObject.__init__(self)
+        # Create GUI
         self.gui = gui
+        self.gui.closeEvent = self.closeEvent
+
+        # Check Settings
+        self.settings_file = SettingsFile()
+
+        # Create Video Viewer
         self.video_viewer = VideoViewer()
         self.video_match = False
         self.video_connected = False
-        self.gui.closeEvent = self.closeEvent
+
+        # Create Video Converter
+        self.video_converter = VideoConverter(self.settings_file)
+
         self.plot_design()
         self.connections()
         self._create_short_cuts()
@@ -215,6 +226,10 @@ class Controller(QObject):
         self.video_viewer.FrameChanged.connect(self.plot_video_pos)
         # self.video_viewer.VideoLoaded.connect(self.check_video)
         self.video_viewer.ConnectToDataTrace.connect(self.connect_video_to_data_trace)
+
+        # PLUGINS
+        # Video Converter
+        self.gui.plugins_menu_action_video_converter.triggered.connect(self.open_video_converter)
 
         # Buttons
         self.gui.next_button.clicked.connect(self._next_roi)
@@ -692,6 +707,10 @@ class Controller(QObject):
     # ==================================================================================================================
     # I/O
     # ------------------------------------------------------------------------------------------------------------------
+    def open_video_converter(self):
+        self.video_converter.show()
+        print('VIDEO CONVERTER')
+
     def save_figure(self):
         # Set the desired file format
         file_format = 'JPEG, (*.jpg);; PNG, (*.png);; TIF, (*.tif);; BMP, (*.bmp);; SVG, (*.svg)'

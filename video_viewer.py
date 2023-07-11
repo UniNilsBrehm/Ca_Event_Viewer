@@ -1,11 +1,10 @@
 import os
 import cv2
 import tifffile
-import numpy as np
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSlider, QPushButton, QFileDialog
 from pyqtgraph import ImageView
-from IPython import embed
+# from IPython import embed
 
 
 class VideoViewer(QMainWindow):
@@ -96,7 +95,7 @@ class VideoViewer(QMainWindow):
     def open_file_dialog(self):
         file_dialog = QFileDialog(self)
         file_dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
-        file_dialog.setNameFilter("Video Files (*.mp4 *.avi, *tiff, *tif)")
+        file_dialog.setNameFilter("Video Files (*.mp4, *.avi, *tiff, *tif)")
         if file_dialog.exec() == QFileDialog.DialogCode.Accepted:
             selected_files = file_dialog.selectedFiles()
             if selected_files:

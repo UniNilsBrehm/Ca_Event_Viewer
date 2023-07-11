@@ -223,6 +223,10 @@ class MainWindow(QMainWindow):
         self.video_menu = self.menu.addMenu("&Video")
         self.video_menu_action_open_video_viewer = self.video_menu.addAction('Open Video Viewer')
 
+        # Plugins Menu
+        self.plugins_menu = self.menu.addMenu("&Plugins")
+        self.plugins_menu_action_video_converter = self.plugins_menu.addAction('Convert Video File')
+
     def _setup_plot(self):
         # pyqtgraph graphic widget (for plotting later)
         self.plot_graphics_layout_widget = pg.GraphicsLayoutWidget(show=True, title="Ca Imaging")

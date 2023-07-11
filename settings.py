@@ -1,6 +1,32 @@
 from pathlib import Path
 from PyQt6.QtCore import Qt
 import pyqtgraph as pg
+import pandas as pd
+import numpy as np
+import csv
+import os
+from IPython import embed
+
+
+class SettingsFile:
+    def __init__(self):
+        f = os.listdir(os.getcwd())
+        if 'settings.csv' in f:
+            self.settings_file = pd.read_csv('settings.csv', index_col=0)
+        else:
+            self.settings_file = dict()
+            # self.settings_file['ffmpeg'] = ['C:/FFmpegTool/bin/ffmpeg.exe']
+            self.settings_file['ffmpeg'] = ['NaN']
+            self.settings_file['sampling_dt'] = [0.05]
+            self.settings_file = pd.DataFrame.from_dict(self.settings_file).transpose()
+            self.settings_file.columns = ['Value']
+            self.settings_file.to_csv('settings.csv')
+
+    def save_settings(self):
+        self.settings_file.to_csv('settings.csv')
+
+    def modify_setting(self, index_name, value):
+        self.settings_file.loc[index_name] = value
 
 
 class Settings:
