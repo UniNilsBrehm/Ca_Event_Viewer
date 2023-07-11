@@ -12,14 +12,27 @@ class SettingsFile:
         if 'settings.csv' in f:
             self.settings_file = pd.read_csv('settings.csv', index_col=0)
         else:
-            self.settings_file = dict()
-            # self.settings_file['ffmpeg'] = ['C:/FFmpegTool/bin/ffmpeg.exe']
-            self.settings_file['ffmpeg'] = ['NaN']
-            self.settings_file['sampling_dt'] = [0.002]
-            self.settings_file['stimulus_sampling_dt'] = [0.01666666666666]
-            self.settings_file = pd.DataFrame.from_dict(self.settings_file).transpose()
-            self.settings_file.columns = ['Value']
+            self.settings_file = pd.DataFrame(columns=['Value'])
+            self.settings_file.loc['ffmpeg'] = 'NaN'
+            self.settings_file.loc['sampling_dt'] = 0.002
+            self.settings_file.loc['stimulus_sampling_dt'] = 0.01666666666666
+            self.settings_file.loc['fbs_percentile'] = 5
+            self.settings_file.loc['temp_dir'] = '/'
+            self.settings_file.loc['default_dir'] = 'C:/'
+
             self.settings_file.to_csv('settings.csv')
+
+            # self.settings_file = dict()
+            # self.settings_file['ffmpeg'] = ['NaN']
+            # self.settings_file['sampling_dt'] = [0.002]
+            # self.settings_file['stimulus_sampling_dt'] = [0.01666666666666]
+
+            # Convert to pandas data frame
+            # self.settings_file = pd.DataFrame.from_dict(self.settings_file).transpose()
+            # self.settings_file.columns = ['Value']
+            # self.settings_file.to_csv('settings.csv')
+
+        # self.default_dir = Path(self.settings_file.loc['default_dir'])
 
     def save_settings(self):
         self.settings_file.to_csv('settings.csv')
@@ -29,7 +42,6 @@ class SettingsFile:
 
 
 class Settings:
-    temp_dir = Path('temp/')
     default_dir = Path('C:/')
     # default_dir = Path('/home/leo/Nextcloud/Bio_B.Sc/6.Semester/Bachelorarbeit/')
     sampling_dt = 0.05

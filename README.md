@@ -3,7 +3,8 @@ Welcome to the experimental branch of the <i>CaEventViewer</i>.
 With the <i>CaEventViewer</i> you can plot and analyze calcium transients from Ca-imaging experiments.
 
 ## New Features
-- Now with a Video/Tiff Viewer that can connect the video to the ROI Data Trace to visualize what is happening!
+- Video/Tiff Viewer that can connect the video to the ROI Data Trace to visualize what is happening!
+- Video File Converter based on FFMPEG and ffmpy
 - Import single stimulus traces for each ROI (e.g. stimulus voltage trace); Must have the same format as the ROI data traces
 - Save Figures (via right-click menu or via Toolbar)
 - Fixed ROI Combo Box Bug
@@ -42,8 +43,20 @@ You can import data stored in .csv (comma separated) files. The structure of thi
 Each column represents a ROI data trace (samples: x<sub>0</sub>-x<sub>n</sub>) and has a "header" with the ROI name.
 Additionally, you will be asked to enter a sampling rate in Hz. Make sure to always use "." (dot) for decimal separation.
 
+## Stimulus Traces individually for each ROI
+For each ROI (column in your data trace) you can add an individual stimulus trace.
+If you omit the "Time" column you will be asked to give a sampling dt in seconds so that a time axis can be computed automatically.
+
+| Time          | ROI_1         | ROI_2         | ... | ROI_n         |
+|---------------|---------------|---------------|-----|---------------|
+| t<sub>0</sub> | s<sub>0</sub> | s<sub>0</sub> |     | s<sub>0</sub> |
+| t<sub>1</sub> | s<sub>1</sub> | s<sub>1</sub> |     | s<sub>1</sub> |
+| : .           | : .           | : .           |     | : .           |
+| t<sub>n</sub> | s<sub>n</sub> | s<sub>n</sub> |     | s<sub>n</sub> |
+
 ## Stimulus Representation
-You can add a visual representation of the stimulus (rectangular function) by importing a .csv file. It must have the following strucutre:
+You can add a visual representation of the stimulus (rectangular function) for all ROIS together by importing a .csv file. It must have the following strucutre:
+
 | start | end | stimulus      |
 |-------|-----|---------------|
 | 10    | 15  | grating_90    |
@@ -54,6 +67,7 @@ Each Row represents one stimulus presentation. It needs a start time (onset, in 
 ## Adding Meta Data
 It is possible to add custom entries like meta data to the output .csv file. The file can only have two rows but as many columns as needed.
 A meta data file could look like this:
+
 | date       | dob        | genotype | method     |
 |------------|------------|----------|------------|
 | 22.04.2023 | 19.04.2023 | abc:Gal4 | Ca-Imaging |
@@ -64,6 +78,9 @@ It will look at all data values that are smaller than the 5th percentile and ret
 
 ## Analysing Events
 By pressing the "Alt" ("command") Key you can enter the "event analyzer mode".
+
+## Video Viewer
+You can independently import a data trace (.csv) and a video (.mp4, .avi, .mkv) or tiff file
 
 ### ----------
 Nils Brehm - 2023

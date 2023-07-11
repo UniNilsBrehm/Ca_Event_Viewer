@@ -1,3 +1,7 @@
 ,Value
-ffmpeg,C:/FFmpegTool/bin/ffmpeg.exe
-sampling_dt,0.01
+ffmpeg,
+sampling_dt,0.002
+stimulus_sampling_dt,0.01666666666666
+fbs_percentile,5
+temp_dir,/
+default_dir,C:/

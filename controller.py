@@ -11,9 +11,9 @@ from pointcollectors import PointCollectionMode, TauCollectionMode
 from settings import Settings, PyqtgraphSettings, PlottingStyles, SettingsFile
 import pyqtgraph as pg
 import pyqtgraph.exporters
-# from IPython import embed
 from video_viewer import VideoViewer
 from video_converter import VideoConverter
+from IPython import embed
 
 
 class MyTextItem(pg.TextItem):
@@ -469,13 +469,13 @@ class Controller(QObject):
         if self.video_viewer.isEnabled() and self.video_connected and self.data_handler.data is not None:
             self.check_video()
             if self.video_match:
+                current_video_frame = self.video_viewer.current_frame
                 # time_axis = self.data_handler.get_time_axis(self.data_handler.roi_id)
                 if self.filter_is_active:
                     y_data = self.data_handler.data[self.data_handler.roi_id]['data_traces']['filtered']
                 else:
                     y_data = self.data_handler.data[self.data_handler.roi_id]['data_traces'][self.data_handler.data_norm_mode]
                 # Get current video frame
-                current_video_frame = self.video_viewer.current_frame
                 y_point = y_data[current_video_frame]
                 current_video_time = current_video_frame / self.data_handler.meta_data['sampling_rate']
                 scatter_item = pg.ScatterPlotItem(
@@ -489,6 +489,32 @@ class Controller(QObject):
                     tip=None,
                 )
                 self.gui.trace_plot_item.addItem(scatter_item)
+
+                # check if there is already a plotted video point
+                item_list = self.gui.stimulus_plot_item.items.copy()
+                for item in item_list:
+                    if item.name() == 'video_point':
+                        self.gui.stimulus_plot_item.removeItem(item)
+
+                if 'stimulus_trace' in self.data_handler.data[self.data_handler.roi_id]:
+                    if len(self.data_handler.data[self.data_handler.roi_id]['stimulus_trace']) > 0:
+                        d = self.data_handler.data[self.data_handler.roi_id]['stimulus_trace']['Values']
+                        # t = self.data_handler.data[self.data_handler.roi_id]['stimulus_trace']['Time']
+                        stimulus_dt = float(self.settings_file.settings_file.loc['stimulus_sampling_dt'].item())
+                        current_sample = int(current_video_time / stimulus_dt)
+                        y_point = d[current_sample]
+                        # CHANGE THIS TO A STORED SAMPLING RATE IN THE DATA HANDLER!
+                        scatter_item2 = pg.ScatterPlotItem(
+                            [current_video_time], [y_point],
+                            symbol='o',
+                            pen=pg.mkPen(color='r', width=2),
+                            brush=pg.mkBrush(color='r'),
+                            size=15,
+                            name=f'video_point',
+                            skipFiniteCheck=True,
+                            tip=None,
+                        )
+                        self.gui.stimulus_plot_item.addItem(scatter_item2)
 
     def clear_plots(self):
         self.gui.trace_plot_item.clear()
@@ -665,6 +691,12 @@ class Controller(QObject):
                     skipFiniteCheck=True,
                     tip=None,
                 )
+                # Get min and max values of all rois
+                y_min, y_max = np.min(d), np.max(d)
+
+                # Reset Axis
+                # self.gui.trace_plot_item.setXRange(0, np.max(time_axis), padding=0)
+                self.gui.stimulus_plot_item.setYRange(y_min, y_max, padding=0)
                 self.gui.stimulus_plot_item.addItem(plot_data_item)
 
     def plot_stimulus(self):
