@@ -2,10 +2,8 @@ from pathlib import Path
 from PyQt6.QtCore import Qt
 import pyqtgraph as pg
 import pandas as pd
-import numpy as np
-import csv
 import os
-from IPython import embed
+# from IPython import embed
 
 
 class SettingsFile:

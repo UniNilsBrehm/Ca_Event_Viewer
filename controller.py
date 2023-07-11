@@ -11,7 +11,7 @@ from pointcollectors import PointCollectionMode, TauCollectionMode
 from settings import Settings, PyqtgraphSettings, PlottingStyles, SettingsFile
 import pyqtgraph as pg
 import pyqtgraph.exporters
-from IPython import embed
+# from IPython import embed
 from video_viewer import VideoViewer
 from video_converter import VideoConverter
 
