@@ -477,8 +477,9 @@ class Controller(QObject):
                 # Get current video frame
                 current_video_frame = self.video_viewer.current_frame
                 y_point = y_data[current_video_frame]
+                current_video_time = current_video_frame / self.data_handler.meta_data['sampling_rate']
                 scatter_item = pg.ScatterPlotItem(
-                    [current_video_frame], [y_point],
+                    [current_video_time], [y_point],
                     symbol='o',
                     pen=pg.mkPen(color='r', width=2),
                     brush=pg.mkBrush(color='r'),
@@ -756,7 +757,8 @@ class Controller(QObject):
                 else:
                     # There is no time axis
                     # Ask for sampling rate
-                    sampling_rate_default = str(0.1)
+                    # sampling_rate_default = str(0.1)
+                    sampling_rate_default = str(self.settings_file.settings_file.loc['stimulus_sampling_dt'].item())
                     sampling_rate_str, ok_pressed = QInputDialog.getText(
                         self.gui, "Enter dt", "dt [s]:", QLineEdit.EchoMode.Normal, sampling_rate_default)
                     if ok_pressed and sampling_rate_str:
@@ -772,6 +774,8 @@ class Controller(QObject):
 
                     # Create time axis with sampling rate
                     # max_time = stimulus_trace.shape[0] / sampling_rate
+                    self.settings_file.modify_setting('stimulus_sampling_dt', sampling_dt)
+                    self.settings_file.save_settings()
                     max_time = stimulus_trace.shape[0] * sampling_dt
                     data = stimulus_trace.to_dict(orient='list')
                     # Check if ROIS match ROIS from data traces
@@ -839,18 +843,24 @@ class Controller(QObject):
         file_dir = self.get_a_file_dir(default_dir=Settings.default_dir, file_format=file_format)
         if file_dir:
             # Get Sampling Rate from User
-            sampling_rate_default = str(Settings.sampling_dt)
+            # sampling_rate_default = str(Settings.sampling_dt)
+            sampling_rate_default = str(self.settings_file.settings_file.loc['sampling_dt'].item())
             sampling_rate_str, ok_pressed = QInputDialog.getText(
                 self.gui, "Enter dt", "dt [s]:", QLineEdit.EchoMode.Normal, sampling_rate_default)
             if ok_pressed and sampling_rate_str:
                 try:
-                    sampling_rate = 1 / float(sampling_rate_str)
+                    sampling_dt = float(sampling_rate_str)
+                    sampling_rate = 1 / sampling_dt
                 except ValueError:
                     QMessageBox.critical(self.gui, 'ERROR', 'Sampling Rate Must Be a Number!')
                     return False
             else:
                 QMessageBox.critical(self.gui, 'ERROR', 'Please Enter Sampling Rate')
                 return False
+
+            self.settings_file.modify_setting('sampling_dt', sampling_dt)
+            self.settings_file.save_settings()
+
             # Open the csv file using pandas
             csv_file = pd.read_csv(file_dir, index_col=False)
             data_name = os.path.split(file_dir)[1][:-4]

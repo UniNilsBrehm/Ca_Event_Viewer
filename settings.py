@@ -17,7 +17,8 @@ class SettingsFile:
             self.settings_file = dict()
             # self.settings_file['ffmpeg'] = ['C:/FFmpegTool/bin/ffmpeg.exe']
             self.settings_file['ffmpeg'] = ['NaN']
-            self.settings_file['sampling_dt'] = [0.05]
+            self.settings_file['sampling_dt'] = [0.002]
+            self.settings_file['stimulus_sampling_dt'] = [0.01666666666666]
             self.settings_file = pd.DataFrame.from_dict(self.settings_file).transpose()
             self.settings_file.columns = ['Value']
             self.settings_file.to_csv('settings.csv')

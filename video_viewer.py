@@ -105,7 +105,7 @@ class VideoViewer(QMainWindow):
             self, "Select Input File", "", "Video Files (*.mp4; *.avi; *.mkv; *.mpeg)")
         if input_file:
             self.load_video(input_file)
-        
+
     def load_video(self, video_file):
         if self.captured_video is not None:
             self.close_file()
@@ -117,7 +117,7 @@ class VideoViewer(QMainWindow):
         if self.video_file.endswith(('.tif', '.tiff', '.TIF', '.TIFF')):
             # This is a tiff file
             # Open the TIFF file in a memory-mapped mode
-            self.captured_video= tifffile.TiffFile(video_file, mode='r')
+            self.captured_video = tifffile.TiffFile(video_file, mode='r')
             # Get the number of pages (image stack size)
             self.total_frames = len(self.captured_video.pages)
             self.is_tiff = True
@@ -270,8 +270,8 @@ class VideoViewer(QMainWindow):
 
         # Initialize video variables
         self.video_file = ""
-        self.video_frames = []
         self.video_frame = None
+        self.video_frame_rate = None
         self.current_frame = 0
         self.total_frames = 0
         self.captured_video = None
