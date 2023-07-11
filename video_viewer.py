@@ -93,14 +93,19 @@ class VideoViewer(QMainWindow):
         self._reset_video_viewer()
 
     def open_file_dialog(self):
-        file_dialog = QFileDialog(self)
-        file_dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
-        file_dialog.setNameFilter("Video Files (*.mp4, *.avi, *tiff, *tif)")
-        if file_dialog.exec() == QFileDialog.DialogCode.Accepted:
-            selected_files = file_dialog.selectedFiles()
-            if selected_files:
-                self.load_video(selected_files[0])
-
+        # file_dialog = QFileDialog(self)
+        # file_dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
+        # file_dialog.setNameFilter("Video Files (*.mp4, *.avi, *tiff, *tif)")
+        #
+        # if file_dialog.exec() == QFileDialog.DialogCode.Accepted:
+        #     selected_files = file_dialog.selectedFiles()
+        #     if selected_files:
+        #         self.load_video(selected_files[0])
+        input_file, _ = QFileDialog.getOpenFileName(
+            self, "Select Input File", "", "Video Files (*.mp4; *.avi; *.mkv; *.mpeg)")
+        if input_file:
+            self.load_video(input_file)
+        
     def load_video(self, video_file):
         if self.captured_video is not None:
             self.close_file()
