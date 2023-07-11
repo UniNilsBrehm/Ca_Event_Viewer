@@ -1,12 +1,8 @@
-import sys
-import io
-import subprocess
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QFileDialog, QLabel, QCheckBox,\
     QComboBox, QApplication
 from IPython import embed
-import ffmpeg
-import time
+import ffmpy
 
 
 class VideoConverter(QMainWindow):
@@ -51,10 +47,19 @@ class VideoConverter(QMainWindow):
         gpu_check_box_layout.addWidget(self.gpu_check_box_label)
         gpu_check_box_layout.addWidget(self.gpu_check_box)
 
+        supress_terminal_output_layout = QHBoxLayout()
+        self.supress_terminal_output = True
+        self.supress_terminal_output_check_box = QCheckBox()
+        self.supress_terminal_output_check_box.setCheckState(Qt.CheckState.Checked)
+        self.supress_terminal_output_check_box.stateChanged.connect(self.get_supress_state)
+        self.supress_terminal_output_label = QLabel('Supress Terminal Output')
+        supress_terminal_output_layout.addWidget(self.supress_terminal_output_label)
+        supress_terminal_output_layout.addWidget(self.supress_terminal_output_check_box)
+
         self.quality_combo_box = QComboBox()
-        self.quality_combo_box.addItem('Best Quality')
-        self.quality_combo_box.addItem('Medium')
-        self.quality_combo_box.addItem('Best Speed')
+        self.quality_combo_box.addItem('fast')
+        self.quality_combo_box.addItem('medium')
+        self.quality_combo_box.addItem('slow')
 
         self.status_label = QLabel('Ready')
 
@@ -66,6 +71,9 @@ class VideoConverter(QMainWindow):
         layout.addWidget(self.ffmpeg_dir_label)
         layout.addSpacing(20)
         layout.addLayout(gpu_check_box_layout)
+        layout.addSpacing(5)
+        layout.addLayout(supress_terminal_output_layout)
+        layout.addSpacing(10)
         layout.addWidget(self.quality_combo_box)
         layout.addSpacing(20)
         layout.addWidget(self.start_button)
@@ -77,6 +85,27 @@ class VideoConverter(QMainWindow):
         self.setWindowTitle("Video Converter")
 
         self.ffmpeg_dir = None
+        self._define_ffmpeg_settings()
+
+    def _define_ffmpeg_settings(self):
+        self.ffmpeg_input_opt = {'gpu': ['-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda'], 'cpu': None}
+
+        self.ffmpeg_output_opt = {
+            'gpu': {
+                'fast': ['-c:v', 'h264_nvenc', '-preset', 'superfast', '-qp', '17'],
+                'medium': ['-c:v', 'h264_nvenc', '-preset', 'medium', '-qp', '17'],
+                'slow': ['-c:v', 'h264_nvenc', '-preset', 'slower', '-qp', '17'],
+            },
+            'cpu': {
+                'fast': ['-c:v', 'libx264', '-preset', 'superfast', '-crf', '17'],
+                'medium': ['-c:v', 'libx264', '-preset', 'medium', '-crf', '17'],
+                'slow': ['-c:v', 'libx264', '-preset', 'slower', '-crf', '17'],
+            }
+            }
+        self.ffmpeg_global_opt = {
+            'supress': ['-y', '-loglevel', 'quiet'],
+            'show': ['-y'],
+        }
 
     def get_gpu_state(self):
         if self.gpu_check_box.checkState() == Qt.CheckState.Checked:
@@ -84,33 +113,35 @@ class VideoConverter(QMainWindow):
         else:
             self.use_gpu = False
 
+    def get_supress_state(self):
+        if self.supress_terminal_output_check_box.checkState() == Qt.CheckState.Checked:
+            self.supress_terminal_output = True
+        else:
+            self.supress_terminal_output = False
+
     def convert_video(self, input_file, output_file):
         if self.ffmpeg_dir is not None:
-            # ffmpeg_cmd = [
-            #     self.ffmpeg_dir,
-            #     '-i', input_file,
-            #     output_file
-            # ]
-            # print('')
-            # print('COMMAND:')
-            # print(ffmpeg_cmd)
-            # print('')
-            # print('')
-            # subprocess.run(ffmpeg_cmd)
-
             # check settings
+            speed = self.quality_combo_box.currentText()
             if self.use_gpu:
-                print('GPU NOT IMPLEMENTED')
-            quality = self.quality_combo_box.currentText()
-            print(f'QUALITY: {quality}')
+                hw = 'gpu'
+            else:
+                hw = 'cpu'
+            input_cmd = self.ffmpeg_input_opt[hw]
+            output_cmd = self.ffmpeg_output_opt[hw][speed]
 
-            # process = (
-            #     ffmpeg
-            #     .input(input_file)
-            #     .output(output_file)
-            #     .run(overwrite_output=True, cmd=self.ffmpeg_dir, quiet=True, capture_stdout=True, capture_stderr=True)
-            #     # .run_async(overwrite_output=True, cmd=self.ffmpeg_dir, quiet=True)
-            # )
+            if self.supress_terminal_output:
+                global_settings = self.ffmpeg_global_opt['supress']
+            else:
+                global_settings = self.ffmpeg_global_opt['show']
+
+            ff = ffmpy.FFmpeg(
+                executable=self.ffmpeg_dir,
+                global_options=global_settings,
+                inputs={input_file: input_cmd},
+                outputs={output_file: output_cmd}
+            )
+            ff.run()
 
     def browse_file_ffmpeg(self):
         self.ffmpeg_dir, _ = QFileDialog.getOpenFileName(self, "Select FFMPEG .exe", "", "ffmpeg (*.exe)")
