@@ -1,6 +1,6 @@
 ,Value
 ffmpeg,
-sampling_dt,0.002
+sampling_dt,0.41407867494824013
 stimulus_sampling_dt,0.01666666666666
 fbs_percentile,5
 temp_dir,/

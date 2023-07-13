@@ -127,8 +127,8 @@ class MainWindow(QMainWindow):
 
         # Save Figure
         self.toolbar.addSeparator()
-        self.toolbar_save_figure = QAction("Save Figure", self)
-        self.toolbar_save_figure.setToolTip("Save Figure")
+        self.toolbar_save_figure = QAction("Save Figure Data", self)
+        self.toolbar_save_figure.setToolTip("Save Figure Data")
         self.toolbar.addAction(self.toolbar_save_figure)
 
         # The Mouse Position

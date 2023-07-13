@@ -102,7 +102,7 @@ class VideoViewer(QMainWindow):
         #     if selected_files:
         #         self.load_video(selected_files[0])
         input_file, _ = QFileDialog.getOpenFileName(
-            self, "Select Input File", "", "Video Files (*.mp4; *.avi; *.mkv; *.mpeg)")
+            self, "Select Input File", "", "Video Files (*.mp4; *.avi; *.mkv; *.mpeg; *.tif; *.tiff *.TIF; *.TIFF)")
         if input_file:
             self.load_video(input_file)
 

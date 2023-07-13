@@ -30,14 +30,6 @@ Meta-Data Structure:
 :   ├── end
 :   ├── info
 
-:   │       ├── raw   
-    │       :
-    │       └── df
-    └── events
-            ├── event 1
-            :   ├── tau rise
-                :
-                └── tau decay
 """
 
 

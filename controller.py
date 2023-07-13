@@ -1,5 +1,6 @@
 import os
 import pickle
+import time
 from zipfile import ZipFile
 import numpy as np
 import pandas as pd
@@ -23,6 +24,41 @@ class MyTextItem(pg.TextItem):
 
     def name(self):
         return self.item_name
+
+
+class MyLinearRegionItem(pg.LinearRegionItem):
+    sigDoubleClicked = pyqtSignal()
+
+    def __init__(self, name, *args, **kwargs):
+        super(MyLinearRegionItem, self).__init__(*args, **kwargs)
+        self.item_name = name
+
+    def name(self):
+        return self.item_name
+
+    def define_range(self):
+        pos = self.startPositions
+
+    def mouseClickEvent(self, ev):
+        if ev.double():
+            # print('DOUBLE')
+            self.sigDoubleClicked.emit()
+            pos1 = self.lines[0].value()
+            self.setRegion((pos1, pos1+100))
+
+        if self.moving and ev.button() == Qt.MouseButton.RightButton:
+            ev.accept()
+            for i, l in enumerate(self.lines):
+                l.setPos(self.startPositions[i])
+            self.moving = False
+            self.sigRegionChanged.emit(self)
+            self.sigRegionChangeFinished.emit(self)
+
+    def hoverEvent(self, ev):
+        if self.movable and (not ev.isExit()) and ev.acceptDrags(Qt.MouseButton.LeftButton):
+            self.setMouseHover(True)
+        else:
+            self.setMouseHover(False)
 
 
 class HoverableCurveItem(pg.PlotCurveItem):
@@ -103,6 +139,8 @@ class Controller(QObject):
         self.video_viewer = VideoViewer()
         self.video_match = False
         self.video_connected = False
+        self.video_time_line = None
+        self.video_time_line_stimulus = None
 
         # Create Video Converter
         self.video_converter = VideoConverter(self.settings_file)
@@ -116,6 +154,9 @@ class Controller(QObject):
         self.stimulus_info_box_visible = False
         self.show_fbs = False
 
+        # Cut Out Regions (pyqtgraph: LinearRegion)
+        self.linear_region = None
+
         # KeyBoard Bindings
         self.gui.key_pressed.connect(self.on_key_press)
         self.gui.key_released.connect(self.on_key_release)
@@ -125,6 +166,9 @@ class Controller(QObject):
         self.filter_is_active = False
         self._start_new_session()
         # self.data_handler.signal_new_data.emit()
+
+        # Stimulus Reconstruction dt
+        self.stimulus_dt = 0.001
 
     def _start_new_session(self):
         self.gui.info_label.setText('Please Open Data File ...')
@@ -155,6 +199,7 @@ class Controller(QObject):
         self.gui.toolbar_show_stimulus.setDisabled(True)
         self.gui.toolbar_show_stimulus_info.setDisabled(True)
         self.gui.toolbar_fbs_trace_action.setDisabled(True)
+        self.gui.toolbar_save_figure.setDisabled(True)
 
     def prepare_new_data(self):
         self.gui.info_label.setText('')
@@ -174,6 +219,7 @@ class Controller(QObject):
         self.gui.file_menu_action_save_viewer_file.setDisabled(False)
         self.gui.trace_plot_item.setLabel('left', 'Raw', **PlottingStyles.axis_label_styles)
         self.gui.toolbar_fbs_trace_action.setDisabled(False)
+        self.gui.toolbar_save_figure.setDisabled(False)
 
     def plot_design(self):
         self.gui.trace_plot_item.setLabel('bottom', 'Time [s]', **PlottingStyles.axis_label_styles)
@@ -207,6 +253,7 @@ class Controller(QObject):
     def signals(self):
         # self.data_handler.signal_roi_id_changed.connect(lambda: self.plot_traces(update_axis=True))
         self.data_handler.signal_roi_id_changed.connect(lambda: self.update_plot(update_axis=True))
+        self.data_handler.signal_roi_id_changed.connect(self.disconnect_video)
 
     def connections(self):
         # File Menu
@@ -244,7 +291,8 @@ class Controller(QObject):
         self.gui.toolbar_show_stimulus_info.triggered.connect(self.stimulus_info_box)
         self.gui.toolbar_fbs_trace_action.triggered.connect(self.toggle_base_line_trace)
         self.gui.toolbar_min_max_action.triggered.connect(self._set_to_min_max)
-        self.gui.toolbar_save_figure.triggered.connect(self.save_figure)
+        self.gui.toolbar_save_figure.triggered.connect(self.collect_events_for_plotting)
+        # self.gui.toolbar_save_figure.triggered.connect(self.save_figure)
 
         # Filter
         self.gui.filter_locK_button.clicked.connect(self.lock_filter_slider)
@@ -263,6 +311,7 @@ class Controller(QObject):
         self.shortcut_import_stimulus = QShortcut(QKeySequence('ctrl+b'), self.gui)
         self.shortcut_exit = QShortcut(QKeySequence('ctrl+q'), self.gui)
         self.shortcut_reset_axis = QShortcut(QKeySequence('R'), self.gui)
+        self.shortcut_linear_region = QShortcut(QKeySequence('L'), self.gui)
 
     def _connect_short_cuts(self, connect=True):
         if connect:
@@ -276,21 +325,108 @@ class Controller(QObject):
             self.shortcut_import_stimulus.activated.connect(self.import_stimulus)
             self.shortcut_exit.activated.connect(self.gui.exit_app)
             self.shortcut_reset_axis.activated.connect(self.reset_axis)
+            self.shortcut_linear_region.activated.connect(self.show_linear_region)
         else:
             self.shortcut_next_roi.activated.disconnect()
             self.shortcut_prev_roi.activated.disconnect()
 
+    def disconnect_video(self):
+        self.video_connected = False
+        item_list = self.gui.trace_plot_item.items.copy()
+        for item in item_list:
+            if isinstance(item, pg.InfiniteLine):
+                self.gui.trace_plot_item.removeItem(item)
+
+        item_list = self.gui.stimulus_plot_item.items.copy()
+        for item in item_list:
+            if isinstance(item, pg.InfiniteLine):
+                self.gui.stimulus_plot_item.removeItem(item)
+
+        self.video_time_line = None
+        self.video_time_line_stimulus = None
+        self.video_viewer.connect_video_to_data_trace_button.setText('Connect to Data')
+
     def connect_video_to_data_trace(self, sig):
         self.video_connected = sig
+        if not self.video_connected:
+            item_list = self.gui.trace_plot_item.items.copy()
+            for item in item_list:
+                if isinstance(item, pg.InfiniteLine):
+                    self.gui.trace_plot_item.removeItem(item)
+
+            item_list = self.gui.stimulus_plot_item.items.copy()
+            for item in item_list:
+                if isinstance(item, pg.InfiniteLine):
+                    self.gui.stimulus_plot_item.removeItem(item)
+
+            self.video_time_line = None
+            self.video_time_line_stimulus = None
         self.check_video()
         self.plot_video_pos()
 
     # ==================================================================================================================
     # PLOTTING
     # ------------------------------------------------------------------------------------------------------------------
-    def update_plot(self, update_axis=False):
+    def update_linear_region(self):
+        fr = self.data_handler.meta_data['sampling_rate']
+        region_vals = self.linear_region.getRegion()
+        start_time = region_vals[0]
+        end_time = region_vals[1]
+        start_idx = int(start_time * fr)
+        end_idx = int(end_time * fr)
+        print(f'Time: from {start_time} s to {end_time} s')
+        print(f'Samples: from {start_idx} to {end_idx}')
+        cot_time, cot_vals = self.cut_out_trace(start_idx, end_idx, filtered=False)
+        if self.filter_is_active:
+            fcot_time, fcot_vals = self.cut_out_trace(start_idx, end_idx, filtered=True)
+
+    def show_linear_region(self):
+        if self.linear_region is None:
+            self.plot_linear_region()
+        else:
+            self.remove_linear_region()
+
+    def remove_linear_region(self):
+        item_list = self.gui.trace_plot_item.items.copy()
+        for item in item_list:
+            if isinstance(item, pg.LinearRegionItem):
+                self.gui.trace_plot_item.removeItem(item)
+        self.linear_region = None
+
+    def plot_linear_region(self):
         # Clear the plot
-        self.gui.trace_plot_item.clear()
+        # self.gui.trace_plot_item.clear()
+        time_axis = self.data_handler.get_time_axis(self.data_handler.roi_id)
+        # Add a LinearRegion for slicing data trace
+        region_pen = pg.mkPen(color='g', width=2)
+        # R, G, B, [A]
+        region_color = pg.mkColor(100, 255, 100, 100)
+        region_hover_color = pg.mkColor(255, 200, 200, 100)
+        self.linear_region = MyLinearRegionItem(
+            name='LinearRegion',
+            values=[100, 500],
+            pen=region_pen,
+            brush=pg.mkBrush(color=region_color),
+            hoverPen=region_pen,
+            hoverBrush=pg.mkBrush(color=region_hover_color),
+            bounds=[0, time_axis.max()],
+            movable=True,
+            swapMode='block',
+            # clipItem=self.gui.trace_plot_item,
+        )
+        # self.linear_region.sigRegionChanged.connect(self.update_linear_region)
+        self.linear_region.sigRegionChangeFinished.connect(self.update_linear_region)
+        # self.linear_region.sigDoubleClicked.connect(self.linear_region_define_range)
+        # region.setZValue(10)
+        # Add the LinearRegionItem to the ViewBox, but tell the ViewBox to exclude this
+        # item when doing auto-range calculations.
+        self.gui.trace_plot_item.addItem(self.linear_region, ignoreBounds=True)
+        # self.update_plot(update_axis=False, clear=False)
+
+    def update_plot(self, update_axis=False, clear=True):
+        # Clear the plot
+        if clear:
+            self.gui.trace_plot_item.clear()
 
         # Plot Data Trace
         self.gui.trace_plot_item.setTitle(f'ROI_{self.data_handler.roi_id}')
@@ -489,6 +625,16 @@ class Controller(QObject):
                     tip=None,
                 )
                 self.gui.trace_plot_item.addItem(scatter_item)
+                if self.video_time_line is None:
+                    self.video_time_line = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen(color=(255, 230, 240), width=2))
+                    self.video_time_line_stimulus = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen(color=(255, 230, 230), width=2))
+                    self.gui.trace_plot_item.addItem(self.video_time_line, ignoreBounds=True)
+                    self.gui.stimulus_plot_item.addItem(self.video_time_line_stimulus, ignoreBounds=True)
+                    self.video_time_line.setPos(current_video_time)
+                    self.video_time_line_stimulus.setPos(current_video_time)
+                else:
+                    self.video_time_line.setPos(current_video_time)
+                    self.video_time_line_stimulus.setPos(current_video_time)
 
                 # check if there is already a plotted video point
                 item_list = self.gui.stimulus_plot_item.items.copy()
@@ -500,10 +646,10 @@ class Controller(QObject):
                     if len(self.data_handler.data[self.data_handler.roi_id]['stimulus_trace']) > 0:
                         d = self.data_handler.data[self.data_handler.roi_id]['stimulus_trace']['Values']
                         # t = self.data_handler.data[self.data_handler.roi_id]['stimulus_trace']['Time']
+                        # CHANGE THIS TO A STORED SAMPLING RATE IN THE DATA HANDLER!
                         stimulus_dt = float(self.settings_file.settings_file.loc['stimulus_sampling_dt'].item())
                         current_sample = int(current_video_time / stimulus_dt)
                         y_point = d[current_sample]
-                        # CHANGE THIS TO A STORED SAMPLING RATE IN THE DATA HANDLER!
                         scatter_item2 = pg.ScatterPlotItem(
                             [current_video_time], [y_point],
                             symbol='o',
@@ -854,7 +1000,8 @@ class Controller(QObject):
             file_dir = self.get_a_file_dir(default_dir=Settings.default_dir, file_format=file_format)
             if file_dir:
                 stimulus_times = pd.read_csv(file_dir, index_col=False)
-                dt = 0.001
+                # dt = 0.001
+                dt = self.stimulus_dt
                 t_max = self.data_handler.get_time_axis(self.data_handler.roi_id).max()
                 time_axis = np.arange(0, t_max, dt)
                 stimulus_values = np.zeros_like(time_axis)
@@ -1300,6 +1447,93 @@ class Controller(QObject):
                     self.gui.trace_plot_item.removeItem(item)
 
         self.data_handler.remove_event(self.data_handler.roi_id, event_id)
+
+    def collect_events_for_plotting(self):
+        roi = self.data_handler.roi_id
+        # Check first if there are any events
+        if self.data_handler.data[roi]['events']:
+            # Get save dir
+            save_dir = QFileDialog.getExistingDirectory(self.gui, "Select Directory")
+            if save_dir:
+                fr = self.data_handler.meta_data['sampling_rate']
+                pre_time = 1
+                post_time = 1
+                pre_sp = int(pre_time * fr)
+                post_sp = int(post_time * fr)
+
+                # Get all events of this ROI
+                events = self.data_handler.data[roi]['events']
+                # Get Stimulus Information
+                s = self.data_handler.meta_data['stimulus']
+                stimulus_trace = s['values']
+                for ev_key in events:
+                    # Prepare data frames for csv files
+                    result_trace = pd.DataFrame()
+                    result_stimulus = pd.DataFrame()
+                    result_rise_fit = pd.DataFrame()
+                    result_decay_fit = pd.DataFrame()
+
+                    event = events[ev_key]
+                    start_idx = events[ev_key]['start_idx'] - pre_sp
+                    end_idx = events[ev_key]['end_idx'] + post_sp
+                    start_time = events[ev_key]['p1_t'] - pre_time
+                    end_time = events[ev_key]['p3_t'] + post_time
+                    s_start_idx = int(start_time / self.stimulus_dt)
+                    s_end_idx = int(end_time / self.stimulus_dt)
+
+                    # Cut out unfiltered trace
+                    trace_t, trace_v = self.cut_out_trace(start_idx=start_idx, end_idx=end_idx, filtered=False)
+                    result_trace['time'] = trace_t
+                    result_trace['values'] = trace_v
+
+                    # Cut out filtered trace
+                    if self.filter_is_active:
+                        filter_trace_t, filter_trace_v = self.cut_out_trace(start_idx=start_idx, end_idx=end_idx, filtered=True)
+                        result_trace['filtered'] = filter_trace_v
+
+                    # Cut out Stimulus
+                    if s['available']:
+                        s_t = self.data_handler.meta_data['stimulus']['time']
+                        stimulus_cut_out = stimulus_trace[s_start_idx:s_end_idx]
+                        stimulus_cut_out_time = s_t[s_start_idx:s_end_idx]
+                        result_stimulus['time'] = stimulus_cut_out_time
+                        result_stimulus['values'] = stimulus_cut_out
+
+                    # Get Exp. Fits
+                    # Cut out the event trace
+                    cut_rise_time, cut_rise_y = self.cut_out_trace(
+                        start_idx=event['start_idx'], end_idx=event['center_idx'], filtered=self.filter_is_active)
+                    cut_decay_time, cut_decay_y = self.cut_out_trace(
+                        start_idx=event['center_idx'], end_idx=event['end_idx'], filtered=self.filter_is_active)
+
+                    # Get the first time point
+                    t0_rise = np.min(cut_rise_time)
+                    t0_decay = np.min(cut_decay_time)
+
+                    # Normalize x and y values to fit data range
+                    rise_exp_t = event['fit_rise_time'] + t0_rise
+                    decay_exp_t = event['fit_decay_time'] + t0_decay
+                    rise_exp_y = event['fit_rise_y'] * (np.max(cut_rise_y) - np.min(cut_rise_y)) + np.min(cut_rise_y)
+                    decay_exp_y = event['fit_decay_y'] * (np.max(cut_decay_y) - np.min(cut_decay_y)) + np.min(cut_decay_y)
+
+                    result_rise_fit['time'] = rise_exp_t
+                    result_rise_fit['values'] = rise_exp_y
+                    result_decay_fit['time'] = decay_exp_t
+                    result_decay_fit['values'] = decay_exp_y
+
+                    # Store to HDD
+                    result_trace.to_csv(f'{save_dir}/{roi}_{ev_key}_data_trace.csv')
+                    result_stimulus.to_csv(f'{save_dir}/{roi}_{ev_key}_stimulus.csv')
+                    result_rise_fit.to_csv(f'{save_dir}/{roi}_{ev_key}_rise_fit.csv')
+                    result_decay_fit.to_csv(f'{save_dir}/{roi}_{ev_key}_decay_fit.csv')
+
+                    # Reconstruct Fig for testing
+                    # import matplotlib.pyplot as plt
+                    # plt.plot(trace_t, trace_v, 'k')
+                    # plt.plot(filter_trace_t, filter_trace_v, 'r')
+                    # plt.plot(rise_exp_t, rise_exp_y, 'b')
+                    # plt.plot(decay_exp_t, decay_exp_y, 'g')
+                    # plt.show()
 
     # ==================================================================================================================
     # DATA TRACE FILTER HANDLING
