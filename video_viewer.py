@@ -1,12 +1,13 @@
 import os
 import cv2
 import tifffile
+import numpy as np
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QUrl
 from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSlider, QPushButton, QFileDialog
 from PyQt6.QtMultimedia import QMediaPlayer
 from PyQt6.QtMultimediaWidgets import QVideoWidget
 from pyqtgraph import ImageView
-# from IPython import embed
+from IPython import embed
 
 
 class VideoViewer(QMainWindow):
@@ -29,6 +30,10 @@ class VideoViewer(QMainWindow):
         self.video_label = QLabel(f'Please Open A Video File')
         # self.speed_label = QLabel('')
         self.image_view = ImageView(self)
+
+        # Connect Mouse Click
+        self.image_view.scene.sigMouseClicked.connect(self.mouse_clicked)
+
         # self.hist = self.image_view.getHistogramWidget()
         # self.hist.sigLevelsChanged.connect(self.hist_lvl_changed)
         # self.hist_lvl = self.hist.getLevels()
@@ -90,9 +95,25 @@ class VideoViewer(QMainWindow):
 
         # Disabled Buttons for start up
         self.set_button_state(True)
+        self.roi_circle = None
 
         # Initialize video variables
         self._reset_video_viewer()
+
+    def mouse_clicked(self, event):
+        self.image_view.scene.setClickRadius(20)
+        vb = self.image_view.getView()
+        scene_coords = event.scenePos()
+        key_modifier = event.modifiers()
+        # if the click is inside the bounding box of the plot
+        if vb.boundingRect().contains(scene_coords):
+            mouse_point = vb.mapSceneToView(scene_coords)
+            mx = mouse_point.x()
+            my = mouse_point.y()
+            print(mx, my)
+            self.roi_circle = (int(mx), int(my))
+            self.update_frame()
+            # self.roi_circle = cv2.circle(self.video_frame, (mx, my), radius=10, color='r', thickness=2)
 
     def open_file_dialog(self):
         input_file, _ = QFileDialog.getOpenFileName(
@@ -115,6 +136,7 @@ class VideoViewer(QMainWindow):
             # Get the number of pages (image stack size)
             self.total_frames = len(self.captured_video.pages)
             self.is_tiff = True
+            self.fps = 30
             # Read one frame
             self.video_frame = self.captured_video.pages.get(0).asarray()
         else:
@@ -193,18 +215,8 @@ class VideoViewer(QMainWindow):
             self.current_frame += 1
             if self.current_frame >= self.total_frames:
                 self.current_frame = 0
+            self.change_frame(self.current_frame)
             self.FrameChanged.emit()
-            if self.is_tiff:
-                self.video_frame = self.captured_video.pages.get(self.current_frame).asarray()
-            else:
-                # Capture the next frame
-                self.captured_video.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame - 1)
-                ret, self.video_frame = self.captured_video.read()
-                if not ret:
-                    return
-
-            self.image_view.setImage(self.rotate_frame(self.video_frame), autoLevels=False)
-            self.current_frame_label.setText(f"Current Frame: {self.current_frame}")
             self.frame_slider.setValue(self.current_frame)
 
     def change_frame(self, frame):
@@ -212,17 +224,28 @@ class VideoViewer(QMainWindow):
             self.current_frame = frame
             if self.current_frame >= self.total_frames:
                 self.current_frame = 0
+
             self.FrameChanged.emit()
             if self.is_tiff:
                 self.video_frame = self.captured_video.pages.get(self.current_frame).asarray()
+                if self.roi_circle is not None:
+                    # v_frame = np.uint8(self.video_frame)
+                    # v_frame = cv2.cvtColor(v_frame, cv2.COLOR_GRAY2RGB)
+                    # self.video_frame = cv2.cvtColor(self.video_frame, cv2.COLOR_GRAY2RGB)
+                    # self.video_frame = cv2.circle(v_frame, self.roi_circle, radius=60, color=(255, 0, 0), thickness=2)
+                    self.video_frame = cv2.circle(self.video_frame, self.roi_circle, radius=60, color=(255, 0, 0), thickness=2)
             else:
                 # Capture the next frame
                 self.captured_video.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame - 1)
                 ret, self.video_frame = self.captured_video.read()
                 if not ret:
                     return
+                if self.roi_circle is not None:
+                    self.video_frame = cv2.circle(self.video_frame, self.roi_circle, radius=60, color=(255, 0, 0), thickness=2)
+
             self.current_frame_label.setText(f"Current Frame: {self.current_frame}")
             self.image_view.setImage(self.rotate_frame(self.video_frame), autoLevels=False)
+            # self.image_view.setImage(self.rotate_frame(self.video_frame), autoLevels=True)
 
     def connect_to_data_trace(self):
         if not self.connected_to_data_trace:

@@ -1139,9 +1139,16 @@ class Controller(QObject):
 
     def check_video(self):
         if self.video_connected:
-            if self.video_viewer.total_frames == self.data_handler.get_roi_data_trace_size(self.data_handler.roi_id):
+            samples_data = self.data_handler.get_roi_data_trace_size(self.data_handler.roi_id)
+            samples_video = self.video_viewer.total_frames
+            if samples_video == samples_data:
                 self.video_match = True
             else:
+                frame_diff = abs(samples_data-samples_video)
+                print(f'Video: {samples_video}')
+                print(f'Data: {samples_data}')
+                print(f'Diff: {frame_diff}')
+
                 self.video_match = False
                 self.video_connected = False
                 self.video_viewer.connect_to_data_trace()
