@@ -165,7 +165,7 @@ class VideoConverter(QMainWindow):
         self.ffmpeg_dir = self.settings.settings_file.loc['ffmpeg'].item()
         # self.please_wait_status()
         input_file, _ = QFileDialog.getOpenFileName(
-            self, "Select Input File", "", "Video Files (*.mp4; *.avi; *.mkv; *.mpeg)")
+            self, "Select Input File", "", "Video Files (*.mp4; *.avi; *.mkv; *.mpeg; *.mpg)")
         if input_file:
             self.input_file = input_file
             output_file, _ = QFileDialog.getSaveFileName(

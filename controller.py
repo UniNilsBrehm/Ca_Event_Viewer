@@ -12,7 +12,7 @@ from pointcollectors import PointCollectionMode, TauCollectionMode
 from settings import Settings, PyqtgraphSettings, PlottingStyles, SettingsFile
 import pyqtgraph as pg
 import pyqtgraph.exporters
-from video_viewer import VideoViewer
+from video_viewer import VideoViewer, VideoViewerQT
 from video_converter import VideoConverter
 from IPython import embed
 
@@ -137,6 +137,7 @@ class Controller(QObject):
 
         # Create Video Viewer
         self.video_viewer = VideoViewer()
+        # self.video_viewer = VideoViewerQT()
         self.video_match = False
         self.video_connected = False
         self.video_time_line = None
