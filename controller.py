@@ -1664,6 +1664,8 @@ class Controller(QObject):
                         result_decay_fit['values'] = decay_exp_y
                         result_decay_fit['residuals'] = residuals_decay
 
+                        data_norm_mode = self.data_handler.data_norm_mode
+                        result_goodness_of_fit['data_norm_mode'] = [data_norm_mode]
                         result_goodness_of_fit['rise_mse'] = [mse_rise]
                         result_goodness_of_fit['rise_r_squared'] = [r_squared_rise]
                         result_goodness_of_fit['rise_residuals_sd'] = [residuals_rise_sd]
