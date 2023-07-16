@@ -5,8 +5,8 @@ from zipfile import ZipFile
 import numpy as np
 import pandas as pd
 from PyQt6.QtGui import QShortcut, QKeySequence, QFont
-from PyQt6.QtWidgets import QInputDialog, QLineEdit, QMessageBox, QFileDialog
-from PyQt6.QtCore import pyqtSignal, QObject, Qt
+from PyQt6.QtWidgets import QInputDialog, QLineEdit, QMessageBox, QFileDialog, QProgressDialog, QApplication
+from PyQt6.QtCore import pyqtSignal, QObject, Qt, QTimer
 from datahandler import DataHandler
 from pointcollectors import PointCollectionMode, TauCollectionMode
 from settings import Settings, PyqtgraphSettings, PlottingStyles, SettingsFile
@@ -1456,92 +1456,257 @@ class Controller(QObject):
 
         self.data_handler.remove_event(self.data_handler.roi_id, event_id)
 
+    def collect_events_for_plotting2(self):
+        num_files = len(self.data_handler.meta_data['roi_list'])
+        save_dir = QFileDialog.getExistingDirectory(self.gui, "Select Directory")
+        self.progress = QProgressDialog("Operation in progress.", "Cancel", 0, num_files-1)
+        self.progress.canceled.connect(self.perform_cancel)
+        self.qtimer = QTimer(self)
+        self.qtimer.timeout.connect(lambda: self.perform(save_dir))
+        self.qtimer.start(0)
+        self.steps = 0
+
+    # def perform_cancel(self):
+    #     self.qtimer.stop()
+    #
+    # def perform(self, save_dir):
+    #     # Loop over all ROIs
+    #     self.progress.setValue(self.steps)
+    #     # ... perform one percent of the operation
+    #     self.steps += 1
+    #     if self.steps > self.progress.maximum():
+    #         self.qtimer.stop()
+    #     else:
+    #         roi = self.data_handler.meta_data['roi_list'][self.steps]
+    #         # for i, roi in enumerate(self.data_handler.meta_data['roi_list']):
+    #         # Check first if there are any events
+    #         if self.data_handler.data[roi]['events']:
+    #             fr = self.data_handler.meta_data['sampling_rate']
+    #             pre_time = 1
+    #             post_time = 1
+    #             pre_sp = int(pre_time * fr)
+    #             post_sp = int(post_time * fr)
+    #             # Get all events of this ROI
+    #             events = self.data_handler.data[roi]['events']
+    #             # Get Stimulus Information
+    #             s = self.data_handler.meta_data['stimulus']
+    #             stimulus_trace = s['values']
+    #             for ev_key in events:
+    #                 # Prepare data frames for csv files
+    #                 result_trace = pd.DataFrame()
+    #                 result_stimulus = pd.DataFrame()
+    #                 result_rise_fit = pd.DataFrame()
+    #                 result_decay_fit = pd.DataFrame()
+    #                 result_goodness_of_fit = pd.DataFrame()
+    #
+    #                 event = events[ev_key]
+    #                 start_idx = events[ev_key]['start_idx'] - pre_sp
+    #                 end_idx = events[ev_key]['end_idx'] + post_sp
+    #                 start_time = events[ev_key]['p1_t'] - pre_time
+    #                 end_time = events[ev_key]['p3_t'] + post_time
+    #                 s_start_idx = int(start_time / self.stimulus_dt)
+    #                 s_end_idx = int(end_time / self.stimulus_dt)
+    #
+    #                 # Cut out unfiltered trace
+    #                 trace_t, trace_v = self.cut_out_trace(start_idx=start_idx, end_idx=end_idx, filtered=False)
+    #                 result_trace['time'] = trace_t
+    #                 result_trace['values'] = trace_v
+    #
+    #                 # Cut out filtered trace
+    #                 if self.filter_is_active:
+    #                     filter_trace_t, filter_trace_v = self.cut_out_trace(start_idx=start_idx, end_idx=end_idx,
+    #                                                                         filtered=True)
+    #                     result_trace['filtered'] = filter_trace_v
+    #
+    #                 # Cut out Stimulus
+    #                 if s['available']:
+    #                     s_t = self.data_handler.meta_data['stimulus']['time']
+    #                     stimulus_cut_out = stimulus_trace[s_start_idx:s_end_idx]
+    #                     stimulus_cut_out_time = s_t[s_start_idx:s_end_idx]
+    #                     result_stimulus['time'] = stimulus_cut_out_time
+    #                     result_stimulus['values'] = stimulus_cut_out
+    #
+    #                 # Get Exp. Fits
+    #                 # Cut out the event trace
+    #                 cut_rise_time, cut_rise_y = self.cut_out_trace(
+    #                     start_idx=event['start_idx'], end_idx=event['center_idx'], filtered=self.filter_is_active)
+    #                 cut_decay_time, cut_decay_y = self.cut_out_trace(
+    #                     start_idx=event['center_idx'], end_idx=event['end_idx'], filtered=self.filter_is_active)
+    #
+    #                 # Get the first time point
+    #                 t0_rise = np.min(cut_rise_time)
+    #                 t0_decay = np.min(cut_decay_time)
+    #
+    #                 # Normalize x and y values to fit data range
+    #                 rise_exp_t = event['fit_rise_time'] + t0_rise
+    #                 decay_exp_t = event['fit_decay_time'] + t0_decay
+    #                 rise_exp_y = event['fit_rise_y'] * (np.max(cut_rise_y) - np.min(cut_rise_y)) + np.min(
+    #                     cut_rise_y)
+    #                 decay_exp_y = event['fit_decay_y'] * (np.max(cut_decay_y) - np.min(cut_decay_y)) + np.min(
+    #                     cut_decay_y)
+    #
+    #                 # Goodness of Fit
+    #                 residuals_rise = cut_rise_y - rise_exp_y
+    #                 residuals_decay = cut_decay_y - decay_exp_y
+    #                 residuals_rise_sd = np.std(residuals_rise)
+    #                 residuals_decay_sd = np.std(residuals_decay)
+    #
+    #                 mse_rise = np.sqrt(np.mean(residuals_rise ** 2))
+    #                 mse_decay = np.sqrt(np.mean(residuals_decay ** 2))
+    #                 r_squared_rise = self.goodness_of_fit_r_squared(y=cut_rise_y, fit_y=rise_exp_y)
+    #                 r_squared_decay = self.goodness_of_fit_r_squared(y=cut_decay_y, fit_y=decay_exp_y)
+    #
+    #                 result_rise_fit['time'] = rise_exp_t
+    #                 result_rise_fit['values'] = rise_exp_y
+    #                 result_rise_fit['residuals'] = residuals_rise
+    #                 result_decay_fit['time'] = decay_exp_t
+    #                 result_decay_fit['values'] = decay_exp_y
+    #                 result_decay_fit['residuals'] = residuals_decay
+    #
+    #                 result_goodness_of_fit['rise_mse'] = [mse_rise]
+    #                 result_goodness_of_fit['rise_r_squared'] = [r_squared_rise]
+    #                 result_goodness_of_fit['rise_residuals_sd'] = [residuals_rise_sd]
+    #                 result_goodness_of_fit['decay_mse'] = [mse_decay]
+    #                 result_goodness_of_fit['decay_r_squared'] = [r_squared_decay]
+    #                 result_goodness_of_fit['decay_residuals_sd'] = [residuals_decay_sd]
+    #
+    #                 # Store to HDD
+    #                 result_trace.to_csv(f'{save_dir}/{roi}_{ev_key}_data_trace.csv', index=None)
+    #                 result_stimulus.to_csv(f'{save_dir}/{roi}_{ev_key}_stimulus.csv', index=None)
+    #                 result_rise_fit.to_csv(f'{save_dir}/{roi}_{ev_key}_rise_fit.csv', index=None)
+    #                 result_decay_fit.to_csv(f'{save_dir}/{roi}_{ev_key}_decay_fit.csv', index=None)
+    #                 result_goodness_of_fit.to_csv(f'{save_dir}/{roi}_{ev_key}_goodness_of_fit.csv', index=None)
+
     def collect_events_for_plotting(self):
-        roi = self.data_handler.roi_id
-        # Check first if there are any events
-        if self.data_handler.data[roi]['events']:
-            # Get save dir
-            save_dir = QFileDialog.getExistingDirectory(self.gui, "Select Directory")
-            if save_dir:
-                fr = self.data_handler.meta_data['sampling_rate']
-                pre_time = 1
-                post_time = 1
-                pre_sp = int(pre_time * fr)
-                post_sp = int(post_time * fr)
+        # Get save dir
+        save_dir = QFileDialog.getExistingDirectory(self.gui, "Select Directory")
+        if save_dir:
+            # Loop over all ROIs
+            for i, roi in enumerate(self.data_handler.meta_data['roi_list']):
+                # Check first if there are any events
+                if self.data_handler.data[roi]['events']:
+                    fr = self.data_handler.meta_data['sampling_rate']
+                    pre_time = 1
+                    post_time = 1
+                    pre_sp = int(pre_time * fr)
+                    post_sp = int(post_time * fr)
+                    # Get all events of this ROI
+                    events = self.data_handler.data[roi]['events']
+                    # Get Stimulus Information
+                    s = self.data_handler.meta_data['stimulus']
+                    stimulus_trace = s['values']
+                    for ev_key in events:
+                        # Prepare data frames for csv files
+                        result_trace = pd.DataFrame()
+                        result_stimulus = pd.DataFrame()
+                        result_rise_fit = pd.DataFrame()
+                        result_decay_fit = pd.DataFrame()
+                        result_goodness_of_fit = pd.DataFrame()
 
-                # Get all events of this ROI
-                events = self.data_handler.data[roi]['events']
-                # Get Stimulus Information
-                s = self.data_handler.meta_data['stimulus']
-                stimulus_trace = s['values']
-                for ev_key in events:
-                    # Prepare data frames for csv files
-                    result_trace = pd.DataFrame()
-                    result_stimulus = pd.DataFrame()
-                    result_rise_fit = pd.DataFrame()
-                    result_decay_fit = pd.DataFrame()
+                        event = events[ev_key]
+                        start_idx = events[ev_key]['start_idx'] - pre_sp
+                        end_idx = events[ev_key]['end_idx'] + post_sp
+                        start_time = events[ev_key]['p1_t'] - pre_time
+                        end_time = events[ev_key]['p3_t'] + post_time
+                        s_start_idx = int(start_time / self.stimulus_dt)
+                        s_end_idx = int(end_time / self.stimulus_dt)
 
-                    event = events[ev_key]
-                    start_idx = events[ev_key]['start_idx'] - pre_sp
-                    end_idx = events[ev_key]['end_idx'] + post_sp
-                    start_time = events[ev_key]['p1_t'] - pre_time
-                    end_time = events[ev_key]['p3_t'] + post_time
-                    s_start_idx = int(start_time / self.stimulus_dt)
-                    s_end_idx = int(end_time / self.stimulus_dt)
+                        # Cut out unfiltered trace
+                        trace_t, trace_v = self.cut_out_trace(start_idx=start_idx, end_idx=end_idx, filtered=False)
+                        result_trace['time'] = trace_t
+                        result_trace['values'] = trace_v
 
-                    # Cut out unfiltered trace
-                    trace_t, trace_v = self.cut_out_trace(start_idx=start_idx, end_idx=end_idx, filtered=False)
-                    result_trace['time'] = trace_t
-                    result_trace['values'] = trace_v
+                        # Cut out filtered trace
+                        if self.filter_is_active:
+                            filter_trace_t, filter_trace_v = self.cut_out_trace(start_idx=start_idx, end_idx=end_idx, filtered=True)
+                            result_trace['filtered'] = filter_trace_v
 
-                    # Cut out filtered trace
-                    if self.filter_is_active:
-                        filter_trace_t, filter_trace_v = self.cut_out_trace(start_idx=start_idx, end_idx=end_idx, filtered=True)
-                        result_trace['filtered'] = filter_trace_v
+                        # Cut out Stimulus
+                        if s['available']:
+                            s_t = self.data_handler.meta_data['stimulus']['time']
+                            stimulus_cut_out = stimulus_trace[s_start_idx:s_end_idx]
+                            stimulus_cut_out_time = s_t[s_start_idx:s_end_idx]
+                            result_stimulus['time'] = stimulus_cut_out_time
+                            result_stimulus['values'] = stimulus_cut_out
 
-                    # Cut out Stimulus
-                    if s['available']:
-                        s_t = self.data_handler.meta_data['stimulus']['time']
-                        stimulus_cut_out = stimulus_trace[s_start_idx:s_end_idx]
-                        stimulus_cut_out_time = s_t[s_start_idx:s_end_idx]
-                        result_stimulus['time'] = stimulus_cut_out_time
-                        result_stimulus['values'] = stimulus_cut_out
+                        # Get Exp. Fits
+                        # Cut out the event trace
+                        cut_rise_time, cut_rise_y = self.cut_out_trace(
+                            start_idx=event['start_idx'], end_idx=event['center_idx'], filtered=self.filter_is_active)
+                        cut_decay_time, cut_decay_y = self.cut_out_trace(
+                            start_idx=event['center_idx'], end_idx=event['end_idx'], filtered=self.filter_is_active)
 
-                    # Get Exp. Fits
-                    # Cut out the event trace
-                    cut_rise_time, cut_rise_y = self.cut_out_trace(
-                        start_idx=event['start_idx'], end_idx=event['center_idx'], filtered=self.filter_is_active)
-                    cut_decay_time, cut_decay_y = self.cut_out_trace(
-                        start_idx=event['center_idx'], end_idx=event['end_idx'], filtered=self.filter_is_active)
+                        # Get the first time point
+                        t0_rise = np.min(cut_rise_time)
+                        t0_decay = np.min(cut_decay_time)
 
-                    # Get the first time point
-                    t0_rise = np.min(cut_rise_time)
-                    t0_decay = np.min(cut_decay_time)
+                        # Normalize x and y values to fit data range
+                        rise_exp_t = event['fit_rise_time'] + t0_rise
+                        decay_exp_t = event['fit_decay_time'] + t0_decay
+                        rise_exp_y = event['fit_rise_y'] * (np.max(cut_rise_y) - np.min(cut_rise_y)) + np.min(cut_rise_y)
+                        decay_exp_y = event['fit_decay_y'] * (np.max(cut_decay_y) - np.min(cut_decay_y)) + np.min(cut_decay_y)
 
-                    # Normalize x and y values to fit data range
-                    rise_exp_t = event['fit_rise_time'] + t0_rise
-                    decay_exp_t = event['fit_decay_time'] + t0_decay
-                    rise_exp_y = event['fit_rise_y'] * (np.max(cut_rise_y) - np.min(cut_rise_y)) + np.min(cut_rise_y)
-                    decay_exp_y = event['fit_decay_y'] * (np.max(cut_decay_y) - np.min(cut_decay_y)) + np.min(cut_decay_y)
+                        # Goodness of Fit
+                        residuals_rise = cut_rise_y - rise_exp_y
+                        residuals_decay = cut_decay_y - decay_exp_y
+                        residuals_rise_sd = np.std(residuals_rise)
+                        residuals_decay_sd = np.std(residuals_decay)
 
-                    result_rise_fit['time'] = rise_exp_t
-                    result_rise_fit['values'] = rise_exp_y
-                    result_decay_fit['time'] = decay_exp_t
-                    result_decay_fit['values'] = decay_exp_y
+                        mse_rise = np.sqrt(np.mean(residuals_rise**2))
+                        mse_decay = np.sqrt(np.mean(residuals_decay**2))
+                        r_squared_rise = self.goodness_of_fit_r_squared(y=cut_rise_y, fit_y=rise_exp_y)
+                        r_squared_decay = self.goodness_of_fit_r_squared(y=cut_decay_y, fit_y=decay_exp_y)
 
-                    # Store to HDD
-                    result_trace.to_csv(f'{save_dir}/{roi}_{ev_key}_data_trace.csv')
-                    result_stimulus.to_csv(f'{save_dir}/{roi}_{ev_key}_stimulus.csv')
-                    result_rise_fit.to_csv(f'{save_dir}/{roi}_{ev_key}_rise_fit.csv')
-                    result_decay_fit.to_csv(f'{save_dir}/{roi}_{ev_key}_decay_fit.csv')
+                        result_rise_fit['time'] = rise_exp_t
+                        result_rise_fit['values'] = rise_exp_y
+                        result_rise_fit['residuals'] = residuals_rise
+                        result_decay_fit['time'] = decay_exp_t
+                        result_decay_fit['values'] = decay_exp_y
+                        result_decay_fit['residuals'] = residuals_decay
 
-                    # Reconstruct Fig for testing
-                    # import matplotlib.pyplot as plt
-                    # plt.plot(trace_t, trace_v, 'k')
-                    # plt.plot(filter_trace_t, filter_trace_v, 'r')
-                    # plt.plot(rise_exp_t, rise_exp_y, 'b')
-                    # plt.plot(decay_exp_t, decay_exp_y, 'g')
-                    # plt.show()
+                        result_goodness_of_fit['rise_mse'] = [mse_rise]
+                        result_goodness_of_fit['rise_r_squared'] = [r_squared_rise]
+                        result_goodness_of_fit['rise_residuals_sd'] = [residuals_rise_sd]
+                        result_goodness_of_fit['decay_mse'] = [mse_decay]
+                        result_goodness_of_fit['decay_r_squared'] = [r_squared_decay]
+                        result_goodness_of_fit['decay_residuals_sd'] = [residuals_decay_sd]
+
+                        # Store to HDD
+                        result_trace.to_csv(f'{save_dir}/{roi}_{ev_key}_data_trace.csv', index=None)
+                        result_stimulus.to_csv(f'{save_dir}/{roi}_{ev_key}_stimulus.csv', index=None)
+                        result_rise_fit.to_csv(f'{save_dir}/{roi}_{ev_key}_rise_fit.csv', index=None)
+                        result_decay_fit.to_csv(f'{save_dir}/{roi}_{ev_key}_decay_fit.csv', index=None)
+                        result_goodness_of_fit.to_csv(f'{save_dir}/{roi}_{ev_key}_goodness_of_fit.csv', index=None)
+
+                        # Reconstruct Fig for testing
+                        # import matplotlib.pyplot as plt
+                        # plt.plot(trace_t, trace_v, 'k')
+                        # plt.plot(filter_trace_t, filter_trace_v, 'r')
+                        # plt.plot(rise_exp_t, rise_exp_y, 'b')
+                        # plt.plot(decay_exp_t, decay_exp_y, 'g')
+                        # plt.show()
+                        # plt.plot(rise_exp_t, residuals_rise, '.b')
+                        # plt.plot(decay_exp_t, residuals_decay, '.g')
+                        # plt.show()
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Icon.Information)
+
+        msg.setText("Exporting Data Finished!")
+        # msg.setInformativeText("This is additional information")
+        msg.setWindowTitle("Exporting Data")
+        # msg.setDetailedText("The details are as follows:")
+        # msg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+        retval = msg.exec()
+
+    @staticmethod
+    def goodness_of_fit_r_squared(y, fit_y):
+        # residual sum of squares
+        ss_res = np.sum((y - fit_y) ** 2)
+        # total sum of squares
+        ss_tot = np.sum((y - np.mean(fit_y)) ** 2)
+        # r-squared
+        r2 = 1 - (ss_res / ss_tot)
+        return r2
 
     # ==================================================================================================================
     # DATA TRACE FILTER HANDLING
