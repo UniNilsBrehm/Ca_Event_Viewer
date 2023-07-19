@@ -1,8 +1,9 @@
 import numpy as np
+import pandas as pd
 from scipy.optimize import curve_fit
 from PyQt6.QtCore import pyqtSignal, QObject
-from settings import Settings
-# from IPython import embed
+from settings import SettingsFile
+from IPython import embed
 """
 Data Structure:
 .
@@ -39,6 +40,7 @@ class DataHandler(QObject):
     def __init__(self):
         QObject.__init__(self)
         # Create a dictionary where each roi is a key with a default dictionary that will later contain all the data
+        self.settings = SettingsFile()
         self.data_traces_key = 'data_traces'
         self.events_key = 'events'
         self.stimulus_traces_key = 'stimulus_trace'
@@ -46,13 +48,15 @@ class DataHandler(QObject):
         self.meta_data = dict()
         self.meta_data['meta_data'] = None
         self.meta_data['sampling_rate'] = None
+        self.meta_data['single_trace_sampling_rate'] = None
+        self.meta_data['single_trace_dt'] = None
         self.meta_data['roi_list'] = None
         self.meta_data['stimulus'] = dict()
         self.meta_data['stimulus']['available'] = False
         self.data_name = None
         self.roi_id = None
         self.time_axis = None
-        self.fbs_per = Settings.fbs_percentile
+        self.fbs_per = float(self.settings.get('fbs_percentile'))
         # Filter Settings
         self.filter_window = None
         self.filtered_trace = None

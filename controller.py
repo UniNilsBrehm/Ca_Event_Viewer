@@ -1,20 +1,21 @@
 import os
+from time import perf_counter
 import pickle
-import time
 from zipfile import ZipFile
 import numpy as np
 import pandas as pd
 from PyQt6.QtGui import QShortcut, QKeySequence, QFont
-from PyQt6.QtWidgets import QInputDialog, QLineEdit, QMessageBox, QFileDialog, QProgressDialog, QApplication
-from PyQt6.QtCore import pyqtSignal, QObject, Qt, QTimer
+from PyQt6.QtWidgets import QInputDialog, QLineEdit, QMessageBox, QFileDialog, QProgressBar, QApplication
+from PyQt6.QtCore import pyqtSignal, QObject, Qt, QTimer, QThread
 from datahandler import DataHandler
 from pointcollectors import PointCollectionMode, TauCollectionMode
-from settings import Settings, PyqtgraphSettings, PlottingStyles, SettingsFile
+from settings import PyqtgraphSettings, PlottingStyles, SettingsFile
 import pyqtgraph as pg
 import pyqtgraph.exporters
-from video_viewer import VideoViewer, VideoViewerQT
+from video_viewer import VideoViewer
 from video_converter import VideoConverter
-from IPython import embed
+from multi_trace_plot import MultiPlotScrollArea
+# from IPython import embed
 
 
 class MyTextItem(pg.TextItem):
@@ -136,6 +137,7 @@ class Controller(QObject):
         self.settings_file = SettingsFile()
 
         # Create Video Viewer
+        # self.video_viewer = VideoViewer()
         self.video_viewer = VideoViewer()
         # self.video_viewer = VideoViewerQT()
         self.video_match = False
@@ -170,6 +172,7 @@ class Controller(QObject):
 
         # Stimulus Reconstruction dt
         self.stimulus_dt = 0.001
+        self.multi_plotter = None
 
     def _start_new_session(self):
         self.gui.info_label.setText('Please Open Data File ...')
@@ -275,6 +278,9 @@ class Controller(QObject):
         # self.video_viewer.VideoLoaded.connect(self.check_video)
         self.video_viewer.ConnectToDataTrace.connect(self.connect_video_to_data_trace)
 
+        # Plot Menu
+        self.gui.plot_menu_action_multiplot.triggered.connect(self.multi_plot)
+
         # PLUGINS
         # Video Converter
         self.gui.plugins_menu_action_video_converter.triggered.connect(self.open_video_converter)
@@ -368,6 +374,29 @@ class Controller(QObject):
     # ==================================================================================================================
     # PLOTTING
     # ------------------------------------------------------------------------------------------------------------------
+    def progress_bar_update(self, val):
+        QApplication.processEvents()
+        self.progress.setValue(val)
+
+    def multi_plot(self):
+        # Prepare Data
+        data_set = self.data_handler.data.copy()
+        data_traces = []
+        for roi in data_set:
+            data_traces.append(data_set[roi]['data_traces'][self.data_handler.data_norm_mode])
+
+        # self.progress_win = QWidget()
+        self.progress = QProgressBar()
+        self.progress.setMaximum(len(data_traces))
+        self.progress.setGeometry(400, 400, 250, 20)
+        self.progress.show()
+
+        self.multi_plotter = MultiPlotScrollArea(np.array(data_traces))
+        self.multi_plotter.row_finished.connect(self.progress_bar_update)
+        self.multi_plotter.start()
+        self.multi_plotter.show()
+        self.progress.close()
+
     def update_linear_region(self):
         fr = self.data_handler.meta_data['sampling_rate']
         region_vals = self.linear_region.getRegion()
@@ -615,6 +644,8 @@ class Controller(QObject):
                 # Get current video frame
                 y_point = y_data[current_video_frame]
                 current_video_time = current_video_frame / self.data_handler.meta_data['sampling_rate']
+
+                # Plot the current Time Point on the data trace
                 scatter_item = pg.ScatterPlotItem(
                     [current_video_time], [y_point],
                     symbol='o',
@@ -627,8 +658,9 @@ class Controller(QObject):
                 )
                 self.gui.trace_plot_item.addItem(scatter_item)
                 if self.video_time_line is None:
-                    self.video_time_line = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen(color=(255, 230, 240), width=2))
-                    self.video_time_line_stimulus = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen(color=(255, 230, 230), width=2))
+                    # Plot a Time Line to the data trace and stimulus plot
+                    self.video_time_line = pg.InfiniteLine(angle=90, movable=False, pen=PlottingStyles.time_line_pen)
+                    self.video_time_line_stimulus = pg.InfiniteLine(angle=90, movable=False, pen=PlottingStyles.time_line_pen)
                     self.gui.trace_plot_item.addItem(self.video_time_line, ignoreBounds=True)
                     self.gui.stimulus_plot_item.addItem(self.video_time_line_stimulus, ignoreBounds=True)
                     self.video_time_line.setPos(current_video_time)
@@ -642,13 +674,13 @@ class Controller(QObject):
                 for item in item_list:
                     if item.name() == 'video_point':
                         self.gui.stimulus_plot_item.removeItem(item)
-
                 if 'stimulus_trace' in self.data_handler.data[self.data_handler.roi_id]:
                     if len(self.data_handler.data[self.data_handler.roi_id]['stimulus_trace']) > 0:
                         d = self.data_handler.data[self.data_handler.roi_id]['stimulus_trace']['Values']
-                        # t = self.data_handler.data[self.data_handler.roi_id]['stimulus_trace']['Time']
-                        # CHANGE THIS TO A STORED SAMPLING RATE IN THE DATA HANDLER!
-                        stimulus_dt = float(self.settings_file.settings_file.loc['stimulus_sampling_dt'].item())
+                        try:
+                            stimulus_dt = self.data_handler.meta_data['single_trace_dt']
+                        except IndexError:
+                            stimulus_dt = float(self.settings_file.settings_file.get('stimulus_sampling_dt'))
                         current_sample = int(current_video_time / stimulus_dt)
                         y_point = d[current_sample]
                         scatter_item2 = pg.ScatterPlotItem(
@@ -897,7 +929,9 @@ class Controller(QObject):
         # file_format = 'PDF, (*.pdf))'
 
         # Let the User choose a file
-        file_dir = self.select_save_file_dir(default_dir=Settings.default_dir, file_format=file_format)
+        # file_dir = self.select_save_file_dir(default_dir=Settings.default_dir, file_format=file_format)
+        file_dir = self.select_save_file_dir(default_dir=self.settings_file.get('default_dir'), file_format=file_format)
+
         if file_dir:
             file_name = os.path.split(file_dir)[1]
             file_dir = os.path.split(file_dir)[0]
@@ -919,7 +953,7 @@ class Controller(QObject):
             # Set the desired file format
             file_format = 'csv file, (*.csv)'
             # Let the User choose a file
-            file_dir = self.get_a_file_dir(default_dir=Settings.default_dir, file_format=file_format)
+            file_dir = self.get_a_file_dir(default_dir=self.settings_file.get('default_dir'), file_format=file_format)
             if file_dir:
                 stimulus_trace = pd.read_csv(file_dir, index_col=False)
                 headers = list(stimulus_trace.keys())
@@ -937,7 +971,7 @@ class Controller(QObject):
                     # There is no time axis
                     # Ask for sampling rate
                     # sampling_rate_default = str(0.1)
-                    sampling_rate_default = str(self.settings_file.settings_file.loc['stimulus_sampling_dt'].item())
+                    sampling_rate_default = str(self.settings_file.get('stimulus_sampling_dt'))
                     sampling_rate_str, ok_pressed = QInputDialog.getText(
                         self.gui, "Enter dt", "dt [s]:", QLineEdit.EchoMode.Normal, sampling_rate_default)
                     if ok_pressed and sampling_rate_str:
@@ -952,6 +986,11 @@ class Controller(QObject):
                         return False
 
                     # Create time axis with sampling rate
+                    try:
+                        self.data_handler.meta_data['single_trace_sampling_rate'] = sampling_rate
+                        self.data_handler.meta_data['single_trace_dt'] = sampling_dt
+                    except IndexError:
+                        print('Could not find single trace meta data in data handler')
                     # max_time = stimulus_trace.shape[0] / sampling_rate
                     self.settings_file.modify_setting('stimulus_sampling_dt', sampling_dt)
                     self.settings_file.save_settings()
@@ -974,7 +1013,7 @@ class Controller(QObject):
             QMessageBox.critical(self.gui, 'ERROR', 'Please Import Data Traces First!')
 
     def export_results(self):
-        file_dir = self.select_save_file_dir(default_dir=Settings.default_dir, file_format='csv, (*.csv)')
+        file_dir = self.select_save_file_dir(default_dir=self.settings_file.get('default_dir'), file_format='csv, (*.csv)')
         if self.data_handler.data is not None and file_dir:
             res = self.data_handler.convert_events_to_csv()
             if res:
@@ -986,7 +1025,7 @@ class Controller(QObject):
             # Set the desired file format
             file_format = 'csv file, (*.csv)'
             # Let the User choose a file
-            file_dir = self.get_a_file_dir(default_dir=Settings.default_dir, file_format=file_format)
+            file_dir = self.get_a_file_dir(default_dir=self.settings_file.get('default_dir'), file_format=file_format)
             if file_dir:
                 meta_data = pd.read_csv(file_dir, index_col=False).to_dict('records')
                 self.data_handler.add_meta_data(meta_data[0])
@@ -998,7 +1037,7 @@ class Controller(QObject):
             # Set the desired file format
             file_format = 'csv file, (*.csv)'
             # Let the User choose a file
-            file_dir = self.get_a_file_dir(default_dir=Settings.default_dir, file_format=file_format)
+            file_dir = self.get_a_file_dir(default_dir=self.settings_file.get('default_dir'), file_format=file_format)
             if file_dir:
                 stimulus_times = pd.read_csv(file_dir, index_col=False)
                 # dt = 0.001
@@ -1020,11 +1059,11 @@ class Controller(QObject):
         # Set the desired file format
         file_format = 'csv file, (*.csv)'
         # Let the User choose a file
-        file_dir = self.get_a_file_dir(default_dir=Settings.default_dir, file_format=file_format)
+        file_dir = self.get_a_file_dir(default_dir=self.settings_file.get('default_dir'), file_format=file_format)
         if file_dir:
             # Get Sampling Rate from User
             # sampling_rate_default = str(Settings.sampling_dt)
-            sampling_rate_default = str(self.settings_file.settings_file.loc['sampling_dt'].item())
+            sampling_rate_default = str(self.settings_file.get('sampling_dt'))
             sampling_rate_str, ok_pressed = QInputDialog.getText(
                 self.gui, "Enter dt", "dt [s]:", QLineEdit.EchoMode.Normal, sampling_rate_default)
             if ok_pressed and sampling_rate_str:
@@ -1080,14 +1119,14 @@ class Controller(QObject):
         if self.data_handler.data is not None:
             stats = self.data_handler.compute_noise_statistics(p=5)
             noise_statistics = pd.DataFrame(stats).transpose()
-            file_dir = self.select_save_file_dir(default_dir=Settings.default_dir, file_format='csv, (*.csv)')
+            file_dir = self.select_save_file_dir(default_dir=self.settings_file.get('default_dir'), file_format='csv, (*.csv)')
             if file_dir:
                 noise_statistics.to_csv(file_dir)
         else:
             QMessageBox.critical(self.gui, 'ERROR', 'Please Import Data Traces First!')
 
     def _save_file(self):
-        file_dir = self.select_save_file_dir(default_dir=Settings.default_dir, file_format='viewer file, (*.vf)')
+        file_dir = self.select_save_file_dir(default_dir=self.settings_file.get('default_dir'), file_format='viewer file, (*.vf)')
         if file_dir:
             data = pickle.dumps(self.data_handler.data)
             meta_data = pickle.dumps(self.data_handler.meta_data)
@@ -1099,7 +1138,7 @@ class Controller(QObject):
                 zip_object.writestr('filter_window.pickle', filter_window)
 
     def _load_file(self):
-        file_dir = self.get_a_file_dir(default_dir=Settings.default_dir, file_format='viewer file, (*.vf)')
+        file_dir = self.get_a_file_dir(default_dir=self.settings_file.get('default_dir'), file_format='viewer file, (*.vf)')
         if file_dir:
             self._start_new_session()
             with ZipFile(file_dir, 'r') as zip_object:
@@ -1455,127 +1494,6 @@ class Controller(QObject):
                     self.gui.trace_plot_item.removeItem(item)
 
         self.data_handler.remove_event(self.data_handler.roi_id, event_id)
-
-    def collect_events_for_plotting2(self):
-        num_files = len(self.data_handler.meta_data['roi_list'])
-        save_dir = QFileDialog.getExistingDirectory(self.gui, "Select Directory")
-        self.progress = QProgressDialog("Operation in progress.", "Cancel", 0, num_files-1)
-        self.progress.canceled.connect(self.perform_cancel)
-        self.qtimer = QTimer(self)
-        self.qtimer.timeout.connect(lambda: self.perform(save_dir))
-        self.qtimer.start(0)
-        self.steps = 0
-
-    # def perform_cancel(self):
-    #     self.qtimer.stop()
-    #
-    # def perform(self, save_dir):
-    #     # Loop over all ROIs
-    #     self.progress.setValue(self.steps)
-    #     # ... perform one percent of the operation
-    #     self.steps += 1
-    #     if self.steps > self.progress.maximum():
-    #         self.qtimer.stop()
-    #     else:
-    #         roi = self.data_handler.meta_data['roi_list'][self.steps]
-    #         # for i, roi in enumerate(self.data_handler.meta_data['roi_list']):
-    #         # Check first if there are any events
-    #         if self.data_handler.data[roi]['events']:
-    #             fr = self.data_handler.meta_data['sampling_rate']
-    #             pre_time = 1
-    #             post_time = 1
-    #             pre_sp = int(pre_time * fr)
-    #             post_sp = int(post_time * fr)
-    #             # Get all events of this ROI
-    #             events = self.data_handler.data[roi]['events']
-    #             # Get Stimulus Information
-    #             s = self.data_handler.meta_data['stimulus']
-    #             stimulus_trace = s['values']
-    #             for ev_key in events:
-    #                 # Prepare data frames for csv files
-    #                 result_trace = pd.DataFrame()
-    #                 result_stimulus = pd.DataFrame()
-    #                 result_rise_fit = pd.DataFrame()
-    #                 result_decay_fit = pd.DataFrame()
-    #                 result_goodness_of_fit = pd.DataFrame()
-    #
-    #                 event = events[ev_key]
-    #                 start_idx = events[ev_key]['start_idx'] - pre_sp
-    #                 end_idx = events[ev_key]['end_idx'] + post_sp
-    #                 start_time = events[ev_key]['p1_t'] - pre_time
-    #                 end_time = events[ev_key]['p3_t'] + post_time
-    #                 s_start_idx = int(start_time / self.stimulus_dt)
-    #                 s_end_idx = int(end_time / self.stimulus_dt)
-    #
-    #                 # Cut out unfiltered trace
-    #                 trace_t, trace_v = self.cut_out_trace(start_idx=start_idx, end_idx=end_idx, filtered=False)
-    #                 result_trace['time'] = trace_t
-    #                 result_trace['values'] = trace_v
-    #
-    #                 # Cut out filtered trace
-    #                 if self.filter_is_active:
-    #                     filter_trace_t, filter_trace_v = self.cut_out_trace(start_idx=start_idx, end_idx=end_idx,
-    #                                                                         filtered=True)
-    #                     result_trace['filtered'] = filter_trace_v
-    #
-    #                 # Cut out Stimulus
-    #                 if s['available']:
-    #                     s_t = self.data_handler.meta_data['stimulus']['time']
-    #                     stimulus_cut_out = stimulus_trace[s_start_idx:s_end_idx]
-    #                     stimulus_cut_out_time = s_t[s_start_idx:s_end_idx]
-    #                     result_stimulus['time'] = stimulus_cut_out_time
-    #                     result_stimulus['values'] = stimulus_cut_out
-    #
-    #                 # Get Exp. Fits
-    #                 # Cut out the event trace
-    #                 cut_rise_time, cut_rise_y = self.cut_out_trace(
-    #                     start_idx=event['start_idx'], end_idx=event['center_idx'], filtered=self.filter_is_active)
-    #                 cut_decay_time, cut_decay_y = self.cut_out_trace(
-    #                     start_idx=event['center_idx'], end_idx=event['end_idx'], filtered=self.filter_is_active)
-    #
-    #                 # Get the first time point
-    #                 t0_rise = np.min(cut_rise_time)
-    #                 t0_decay = np.min(cut_decay_time)
-    #
-    #                 # Normalize x and y values to fit data range
-    #                 rise_exp_t = event['fit_rise_time'] + t0_rise
-    #                 decay_exp_t = event['fit_decay_time'] + t0_decay
-    #                 rise_exp_y = event['fit_rise_y'] * (np.max(cut_rise_y) - np.min(cut_rise_y)) + np.min(
-    #                     cut_rise_y)
-    #                 decay_exp_y = event['fit_decay_y'] * (np.max(cut_decay_y) - np.min(cut_decay_y)) + np.min(
-    #                     cut_decay_y)
-    #
-    #                 # Goodness of Fit
-    #                 residuals_rise = cut_rise_y - rise_exp_y
-    #                 residuals_decay = cut_decay_y - decay_exp_y
-    #                 residuals_rise_sd = np.std(residuals_rise)
-    #                 residuals_decay_sd = np.std(residuals_decay)
-    #
-    #                 mse_rise = np.sqrt(np.mean(residuals_rise ** 2))
-    #                 mse_decay = np.sqrt(np.mean(residuals_decay ** 2))
-    #                 r_squared_rise = self.goodness_of_fit_r_squared(y=cut_rise_y, fit_y=rise_exp_y)
-    #                 r_squared_decay = self.goodness_of_fit_r_squared(y=cut_decay_y, fit_y=decay_exp_y)
-    #
-    #                 result_rise_fit['time'] = rise_exp_t
-    #                 result_rise_fit['values'] = rise_exp_y
-    #                 result_rise_fit['residuals'] = residuals_rise
-    #                 result_decay_fit['time'] = decay_exp_t
-    #                 result_decay_fit['values'] = decay_exp_y
-    #                 result_decay_fit['residuals'] = residuals_decay
-    #
-    #                 result_goodness_of_fit['rise_mse'] = [mse_rise]
-    #                 result_goodness_of_fit['rise_r_squared'] = [r_squared_rise]
-    #                 result_goodness_of_fit['rise_residuals_sd'] = [residuals_rise_sd]
-    #                 result_goodness_of_fit['decay_mse'] = [mse_decay]
-    #                 result_goodness_of_fit['decay_r_squared'] = [r_squared_decay]
-    #                 result_goodness_of_fit['decay_residuals_sd'] = [residuals_decay_sd]
-    #
-    #                 # Store to HDD
-    #                 result_trace.to_csv(f'{save_dir}/{roi}_{ev_key}_data_trace.csv', index=None)
-    #                 result_stimulus.to_csv(f'{save_dir}/{roi}_{ev_key}_stimulus.csv', index=None)
-    #                 result_rise_fit.to_csv(f'{save_dir}/{roi}_{ev_key}_rise_fit.csv', index=None)
-    #                 result_decay_fit.to_csv(f'{save_dir}/{roi}_{ev_key}_decay_fit.csv', index=None)
-    #                 result_goodness_of_fit.to_csv(f'{save_dir}/{roi}_{ev_key}_goodness_of_fit.csv', index=None)
 
     def collect_events_for_plotting(self):
         # Get save dir

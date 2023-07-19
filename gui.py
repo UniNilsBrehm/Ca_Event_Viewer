@@ -223,6 +223,10 @@ class MainWindow(QMainWindow):
         self.video_menu = self.menu.addMenu("&Video")
         self.video_menu_action_open_video_viewer = self.video_menu.addAction('Open Video Viewer')
 
+        # Plot Menu
+        self.plot_menu = self.menu.addMenu("Plot")
+        self.plot_menu_action_multiplot = self.plot_menu.addAction('Multi Plot')
+
         # Plugins Menu
         self.plugins_menu = self.menu.addMenu("&Plugins")
         self.plugins_menu_action_video_converter = self.plugins_menu.addAction('Convert Video File')

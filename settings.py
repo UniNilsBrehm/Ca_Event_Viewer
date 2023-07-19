@@ -17,7 +17,7 @@ class SettingsFile:
             self.settings_file.loc['sampling_dt'] = 0.002
             self.settings_file.loc['stimulus_sampling_dt'] = 0.01666666666666
             self.settings_file.loc['fbs_percentile'] = 5
-            self.settings_file.loc['temp_dir'] = '/'
+            # self.settings_file.loc['temp_dir'] = '/'
             self.settings_file.loc['default_dir'] = 'C:/'
 
             self.settings_file.to_csv('settings.csv')
@@ -40,13 +40,20 @@ class SettingsFile:
     def modify_setting(self, index_name, value):
         self.settings_file.loc[index_name] = value
 
+    def get(self, key_name):
+        if key_name == 'default_dir':
+            out = Path(self.settings_file.loc[key_name].item())
+        else:
+            out = self.settings_file.loc[key_name].item()
+        return out
 
-class Settings:
-    default_dir = Path('C:/')
-    # default_dir = Path('/home/leo/Nextcloud/Bio_B.Sc/6.Semester/Bachelorarbeit/')
-    sampling_dt = 0.05
-    sampling_rate = 1 / sampling_dt
-    fbs_percentile = 5
+
+# class Settings:
+#     default_dir = Path('C:/')
+#     # default_dir = Path('/home/leo/Nextcloud/Bio_B.Sc/6.Semester/Bachelorarbeit/')
+#     sampling_dt = 0.05
+#     sampling_rate = 1 / sampling_dt
+#     fbs_percentile = 5
 
 
 class PyqtgraphSettings:
@@ -69,6 +76,8 @@ class PlottingStyles:
     fit_rise_shadow_pen = pg.mkPen(color='k', width=4)
     fit_decay_pen = pg.mkPen(color='b', width=2, style=Qt.PenStyle.DotLine)
     fit_decay_shadow_pen = pg.mkPen(color='k', width=4)
+
+    time_line_pen = pg.mkPen(color=(255, 245, 245), width=2)
 
     line_pen = pg.mkPen(line_style)
     line_pen_transparent = pg.mkPen(line_style_transparent)

@@ -1,16 +1,20 @@
 import os
 import cv2
 import tifffile
-import numpy as np
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QUrl
 from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSlider, QPushButton, QFileDialog
 from PyQt6.QtMultimedia import QMediaPlayer
 from PyQt6.QtMultimediaWidgets import QVideoWidget
 from pyqtgraph import ImageView
-from IPython import embed
+import subprocess as sp
+import numpy as np
+# from IPython import embed
+
+FFMPEG_BIN = 'C:/FFmpegTool/bin/ffmpeg.exe'
 
 
 class VideoViewer(QMainWindow):
+
     FrameChanged = pyqtSignal()
     VideoLoaded = pyqtSignal()
     ConnectToDataTrace = pyqtSignal(bool)
@@ -100,6 +104,8 @@ class VideoViewer(QMainWindow):
         # Initialize video variables
         self._reset_video_viewer()
 
+        self.pipe = None
+
     def mouse_clicked(self, event):
         self.image_view.scene.setClickRadius(20)
         vb = self.image_view.getView()
@@ -121,6 +127,17 @@ class VideoViewer(QMainWindow):
         if input_file:
             self.load_video(input_file)
 
+    def ffmpeg_read_frame(self):
+        # 400 * 288 * 3 bytes (= 1 frame)
+        raw_image = self.pipe.stdout.read(420*288*3)
+
+        # transform the byte read into a numpy array
+        image = np.fromstring(raw_image, dtype='uint8')
+        self.video_frame = image.reshape((288, 420, 3))
+
+        # throw away the data in the pipe's buffer.
+        self.pipe.stdout.flush()
+
     def load_video(self, video_file):
         if self.captured_video is not None:
             self.close_file()
@@ -141,6 +158,19 @@ class VideoViewer(QMainWindow):
             self.video_frame = self.captured_video.pages.get(0).asarray()
         else:
             # Read one frame
+            # FFMPEG Method:
+            # Open File and direct it to python
+            # command = [FFMPEG_BIN,
+            #            '-i', self.video_file,
+            #            '-f', 'image2pipe',
+            #            '-pix_fmt', 'rgb24',
+            #            '-vcodec', 'rawvideo', '-']
+            # self.pipe = sp.Popen(command, stdout=sp.PIPE, bufsize=10 ** 8)
+            #
+            # # read the first frame
+            # self.ffmpeg_read_frame()
+
+            # OpenCV Method:
             self.captured_video = cv2.VideoCapture(self.video_file)
             self.fps = self.captured_video.get(cv2.CAP_PROP_FPS)
             self.total_frames = int(self.captured_video.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -153,7 +183,7 @@ class VideoViewer(QMainWindow):
         self.current_frame_label.setText(f"Current Frame: {self.current_frame}")
         self.image_view.setImage(self.rotate_frame(self.video_frame), autoLevels=True)
         self.frame_slider.setValue(0)
-        self.video_label.setText(f'Video File: {os.path.split(video_file)[1]}, {self.fps:.2f} Hz')
+        # self.video_label.setText(f'Video File: {os.path.split(video_file)[1]}, {self.fps:.2f} Hz')
 
         # Activate Buttons (False: Show Buttons)
         self.set_button_state(False)
@@ -174,7 +204,8 @@ class VideoViewer(QMainWindow):
             return
         # self.timer.start(33)  # 30 frames per second (33 milliseconds per frame)
         # ms = self.ms_per_frame[self.ms_per_frame_id]
-        ms = int((1/self.fps) * 1000)
+        # ms = int((1/self.fps) * 1000)
+        ms = 33
 
         self.timer.start(ms)  # 30 frames per second (33 milliseconds per frame)
         # self.speed_label.setText(f'speed: {self.ms_per_frame_base / ms} x')
@@ -216,7 +247,7 @@ class VideoViewer(QMainWindow):
             if self.current_frame >= self.total_frames:
                 self.current_frame = 0
             self.change_frame(self.current_frame)
-            self.FrameChanged.emit()
+            # self.FrameChanged.emit()
             self.frame_slider.setValue(self.current_frame)
 
     def change_frame(self, frame):
@@ -225,7 +256,7 @@ class VideoViewer(QMainWindow):
             if self.current_frame >= self.total_frames:
                 self.current_frame = 0
 
-            self.FrameChanged.emit()
+            # self.FrameChanged.emit()
             if self.is_tiff:
                 self.video_frame = self.captured_video.pages.get(self.current_frame).asarray()
                 if self.roi_circle is not None:
@@ -235,6 +266,7 @@ class VideoViewer(QMainWindow):
                     # self.video_frame = cv2.circle(v_frame, self.roi_circle, radius=60, color=(255, 0, 0), thickness=2)
                     self.video_frame = cv2.circle(self.video_frame, self.roi_circle, radius=60, color=(255, 0, 0), thickness=2)
             else:
+                # self.ffmpeg_read_frame()
                 # Capture the next frame
                 self.captured_video.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame - 1)
                 ret, self.video_frame = self.captured_video.read()
@@ -458,5 +490,3 @@ class VideoViewerQT(QMainWindow):
 
     def set_position(self, position):
         self.media_player.setPosition(position)
-
-
