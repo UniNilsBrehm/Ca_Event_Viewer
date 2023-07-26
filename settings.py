@@ -17,8 +17,13 @@ class SettingsFile:
             self.settings_file.loc['sampling_dt'] = 0.002
             self.settings_file.loc['stimulus_sampling_dt'] = 0.01666666666666
             self.settings_file.loc['fbs_percentile'] = 5
-            # self.settings_file.loc['temp_dir'] = '/'
             self.settings_file.loc['default_dir'] = 'C:/'
+            # Filter Settings
+            # Values in ms
+            self.settings_file.loc['filter_min'] = 0
+            self.settings_file.loc['filter_max'] = 10 * 1000
+            self.settings_file.loc['filter_interval'] = 10
+            self.settings_file.loc['filter_default'] = 5 * 1000
 
             self.settings_file.to_csv('settings.csv')
 

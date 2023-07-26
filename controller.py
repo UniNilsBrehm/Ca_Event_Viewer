@@ -1200,6 +1200,7 @@ class Controller(QObject):
             roi_id_nr = roi_id_nr % self.data_handler.get_roi_count()
             roi_id = self.data_handler.meta_data['roi_list'][roi_id_nr]
             self.data_handler.change_roi(roi_id)
+            self.gui.roi_selection_combobox.setCurrentIndex(roi_id_nr)
 
     def _prev_roi(self):
         if self.data_handler.data is not None:
@@ -1207,7 +1208,8 @@ class Controller(QObject):
             roi_id_nr = roi_id_nr % self.data_handler.get_roi_count()
             roi_id = self.data_handler.meta_data['roi_list'][roi_id_nr]
             self.data_handler.change_roi(roi_id)
-            self.data_handler.moving_average_filter()
+            # self.data_handler.moving_average_filter()
+            self.gui.roi_selection_combobox.setCurrentIndex(roi_id_nr)
 
     def _set_to_min_max(self):
         self.data_handler.data_norm_mode = 'min_max'
@@ -1472,6 +1474,16 @@ class Controller(QObject):
         cut_out_time = time_axis[start_idx:end_idx]
         return cut_out_time, cut_out
 
+    def cut_out_trace_for_plotting(self, start_idx, end_idx, roi, filtered=False):
+        time_axis = self.data_handler.get_time_axis(roi)
+        if filtered:
+            trace = self.data_handler.data[roi]['data_traces']['filtered']
+        else:
+            trace = self.data_handler.data[roi]['data_traces'][self.data_handler.data_norm_mode]
+        cut_out = trace[start_idx:end_idx]
+        cut_out_time = time_axis[start_idx:end_idx]
+        return cut_out_time, cut_out
+
     def cancel_everything(self):
         if self.point_collection.active:
             self.point_collection.stop_collecting()
@@ -1496,6 +1508,7 @@ class Controller(QObject):
         self.data_handler.remove_event(self.data_handler.roi_id, event_id)
 
     def collect_events_for_plotting(self):
+        from IPython import embed
         # Get save dir
         save_dir = QFileDialog.getExistingDirectory(self.gui, "Select Directory")
         if save_dir:
@@ -1530,13 +1543,17 @@ class Controller(QObject):
                         s_end_idx = int(end_time / self.stimulus_dt)
 
                         # Cut out unfiltered trace
-                        trace_t, trace_v = self.cut_out_trace(start_idx=start_idx, end_idx=end_idx, filtered=False)
+                        # trace_t, trace_v = self.cut_out_trace(start_idx=start_idx, end_idx=end_idx, filtered=False)
+                        trace_t, trace_v = self.cut_out_trace_for_plotting(start_idx=start_idx, end_idx=end_idx, roi=roi, filtered=False)
+
                         result_trace['time'] = trace_t
                         result_trace['values'] = trace_v
 
                         # Cut out filtered trace
                         if self.filter_is_active:
-                            filter_trace_t, filter_trace_v = self.cut_out_trace(start_idx=start_idx, end_idx=end_idx, filtered=True)
+                            # filter_trace_t, filter_trace_v = self.cut_out_trace(start_idx=start_idx, end_idx=end_idx, filtered=True)
+                            filter_trace_t, filter_trace_v = self.cut_out_trace_for_plotting(
+                                start_idx=start_idx, end_idx=end_idx, roi=roi, filtered=True)
                             result_trace['filtered'] = filter_trace_v
 
                         # Cut out Stimulus
@@ -1549,10 +1566,15 @@ class Controller(QObject):
 
                         # Get Exp. Fits
                         # Cut out the event trace
-                        cut_rise_time, cut_rise_y = self.cut_out_trace(
-                            start_idx=event['start_idx'], end_idx=event['center_idx'], filtered=self.filter_is_active)
-                        cut_decay_time, cut_decay_y = self.cut_out_trace(
-                            start_idx=event['center_idx'], end_idx=event['end_idx'], filtered=self.filter_is_active)
+                        # cut_rise_time, cut_rise_y = self.cut_out_trace(
+                        #     start_idx=event['start_idx'], end_idx=event['center_idx'], filtered=self.filter_is_active)
+                        # cut_decay_time, cut_decay_y = self.cut_out_trace(
+                        #     start_idx=event['center_idx'], end_idx=event['end_idx'], filtered=self.filter_is_active)
+
+                        cut_rise_time, cut_rise_y = self.cut_out_trace_for_plotting(
+                            start_idx=event['start_idx'], end_idx=event['center_idx'], roi=roi, filtered=self.filter_is_active)
+                        cut_decay_time, cut_decay_y = self.cut_out_trace_for_plotting(
+                            start_idx=event['center_idx'], end_idx=event['end_idx'], roi=roi, filtered=self.filter_is_active)
 
                         # Get the first time point
                         t0_rise = np.min(cut_rise_time)
@@ -1592,12 +1614,12 @@ class Controller(QObject):
                         result_goodness_of_fit['decay_residuals_sd'] = [residuals_decay_sd]
 
                         # Store to HDD
-                        result_trace.to_csv(f'{save_dir}/{roi}_{ev_key}_data_trace.csv', index=None)
-                        result_stimulus.to_csv(f'{save_dir}/{roi}_{ev_key}_stimulus.csv', index=None)
-                        result_rise_fit.to_csv(f'{save_dir}/{roi}_{ev_key}_rise_fit.csv', index=None)
-                        result_decay_fit.to_csv(f'{save_dir}/{roi}_{ev_key}_decay_fit.csv', index=None)
-                        result_goodness_of_fit.to_csv(f'{save_dir}/{roi}_{ev_key}_goodness_of_fit.csv', index=None)
-
+                        result_trace.to_csv(f'{save_dir}/{roi}_{ev_key}_data_trace.csv', index=False)
+                        result_trace.to_csv(f'{save_dir}/{roi}_{ev_key}_data_trace.csv', index=False)
+                        result_stimulus.to_csv(f'{save_dir}/{roi}_{ev_key}_stimulus.csv', index=False)
+                        result_rise_fit.to_csv(f'{save_dir}/{roi}_{ev_key}_rise_fit.csv', index=False)
+                        result_decay_fit.to_csv(f'{save_dir}/{roi}_{ev_key}_decay_fit.csv', index=False)
+                        result_goodness_of_fit.to_csv(f'{save_dir}/{roi}_{ev_key}_goodness_of_fit.csv', index=False)
                         # Reconstruct Fig for testing
                         # import matplotlib.pyplot as plt
                         # plt.plot(trace_t, trace_v, 'k')

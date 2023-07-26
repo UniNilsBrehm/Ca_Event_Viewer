@@ -173,6 +173,10 @@ class DataHandler(QObject):
     def _to_df_over_f(self, raw_data):
         fbs = np.percentile(raw_data, self.fbs_per, axis=0)
         data_df = (raw_data - fbs) / fbs
+        # mean correction
+        # win = int(600 * self.meta_data['sampling_rate'])
+        # mean_trace = np.convolve(data_df, np.ones(win) / win, mode='same')
+        # data_df = data_df - mean_trace
         return fbs, data_df
 
     @staticmethod

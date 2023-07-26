@@ -3,6 +3,7 @@ from PyQt6.QtCore import pyqtSignal, Qt, QEvent
 from PyQt6.QtWidgets import QMainWindow, QPushButton, QWidget, QLabel, QVBoxLayout, \
     QMessageBox, QHBoxLayout, QSlider, QComboBox, QToolBar
 import pyqtgraph as pg
+from settings import SettingsFile
 
 
 class MyToolbar(QToolBar):
@@ -23,13 +24,19 @@ class MainWindow(QMainWindow):
     def __init__(self, screen):
         super().__init__()
         self.screen = screen
+        self.settings = SettingsFile()
 
         # Filter Settings
         # Values in ms
-        self.filter_min = 0
-        self.filter_max = 10 * 1000
-        self.filter_interval = 10
-        self.filter_default = 5 * 1000
+        # self.filter_min = 0
+        # self.filter_max = 10 * 1000
+        # self.filter_interval = 10
+        # self.filter_default = 5 * 1000
+        # self.filter_on = False
+        self.filter_min = int(self.settings.get('filter_min'))
+        self.filter_max = int(self.settings.get('filter_max'))
+        self.filter_interval = int(self.settings.get('filter_interval'))
+        self.filter_default = int(self.settings.get('filter_default'))
         self.filter_on = False
 
         # Setup GUI Elements
