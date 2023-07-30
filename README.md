@@ -22,8 +22,8 @@ pip install pyqtgraph
 pip install opencv-python
 pip install ffmpy
 ```
-Or you can use the "conda_env.yml" file to create an anaconda environment like this:
-Open you anaconda prompt (terminal) and navigate to the location of the "conda_env.yml" file
+Or you can use the "conda_env.yml" file to create an anaconda environment like this:\
+Open you anaconda prompt (terminal) and navigate to the location of the "conda_env.yml" file.\
 Then type:
 
 ```shell
