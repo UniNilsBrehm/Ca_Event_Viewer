@@ -1,6 +1,6 @@
 ,Value
 ffmpeg,
-sampling_dt,0.4
+sampling_dt,0.413
 stimulus_sampling_dt,0.016666667
 fbs_percentile,20
 default_dir,C:/

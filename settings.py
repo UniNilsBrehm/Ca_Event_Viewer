@@ -1,9 +1,44 @@
 from pathlib import Path
 from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
 import pyqtgraph as pg
 import pandas as pd
 import os
 # from IPython import embed
+
+
+class SettingsMenu(QMainWindow):
+    def __init__(self, data_handler):
+        super().__init__()
+        self.setWindowTitle("Settings")
+        # self.setGeometry(100, 100, 800, 600)
+
+        # Create the main widget and layout
+        self.central_widget = QWidget(self)
+        self.layout = QVBoxLayout(self.central_widget)
+
+        # Data Sampling Rate
+        self.sampling_rate_layout = QHBoxLayout()
+        self.sampling_rate_label = QLabel('Sampling Rate')
+        self.sampling_rate_label_edit_button = QPushButton('Edit')
+        self.sampling_rate_layout.addWidget(self.sampling_rate_label)
+        self.sampling_rate_layout.addWidget(self.sampling_rate_label_edit_button)
+
+        # Filter Range
+        self.filter_range_layout = QHBoxLayout()
+        self.filter_range_label = QLabel('Filter Range')
+        self.filter_range_label_edit_button = QPushButton('Edit')
+        self.filter_range_layout.addWidget(self.filter_range_label)
+        self.filter_range_layout.addWidget(self.filter_range_label_edit_button)
+        # fbs percentile
+
+        # Main Layout
+        self.layout.addLayout(self.sampling_rate_layout)
+        self.layout.addLayout(self.filter_range_layout)
+        self.setCentralWidget(self.central_widget)
+
+    def show_menu(self):
+        self.show()
 
 
 class SettingsFile:

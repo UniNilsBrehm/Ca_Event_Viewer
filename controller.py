@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import QInputDialog, QLineEdit, QMessageBox, QFileDialog, Q
 from PyQt6.QtCore import pyqtSignal, QObject, Qt, QTimer, QThread
 from datahandler import DataHandler
 from pointcollectors import PointCollectionMode, TauCollectionMode
-from settings import PyqtgraphSettings, PlottingStyles, SettingsFile
+from settings import PyqtgraphSettings, PlottingStyles, SettingsFile, SettingsMenu
 import pyqtgraph as pg
 import pyqtgraph.exporters
 from video_viewer import VideoViewer
@@ -265,26 +265,26 @@ class Controller(QObject):
         self.gui.file_menu_action_import_traces.triggered.connect(self.import_traces_from_csv)
         self.gui.file_menu_action_import_stimulus.triggered.connect(self.import_stimulus)
         self.gui.file_menu_action_import_stimulus_trace.triggered.connect(self.import_single_trace)
-        self.gui.file_menu_action_noise.triggered.connect(self.export_noise_statistics)
         self.gui.file_menu_action_import_meta_data.triggered.connect(self.import_meta_data)
         self.gui.file_menu_action_save_csv.triggered.connect(self.export_results)
         self.gui.file_menu_action_open_viewer_file.triggered.connect(self._load_file)
         self.gui.file_menu_action_save_viewer_file.triggered.connect(self._save_file)
+        self.gui.file_menu_action_settings.triggered.connect(self._edit_settings)
         self.gui.file_menu_action_exit.triggered.connect(self.gui.exit_app)
 
-        # Video Menu
-        self.gui.video_menu_action_open_video_viewer.triggered.connect(self.open_video_viewer)
+        # Tools Menu
+        # Video Viewer
+        self.gui.tools_menu_open_video_viewer.triggered.connect(self.open_video_viewer)
         self.video_viewer.FrameChanged.connect(self.plot_video_pos)
-        # self.video_viewer.VideoLoaded.connect(self.check_video)
         self.video_viewer.ConnectToDataTrace.connect(self.connect_video_to_data_trace)
 
-        # Plot Menu
-        self.gui.plot_menu_action_multiplot.triggered.connect(self.multi_plot)
+        # MultiPlot
+        self.gui.tools_menu_multiplot.triggered.connect(self.multi_plot)
 
-        # PLUGINS
         # Video Converter
-        self.gui.plugins_menu_action_video_converter.triggered.connect(self.open_video_converter)
+        self.gui.tools_menu_video_converter.triggered.connect(self.open_video_converter)
 
+        # Navigation
         # Buttons
         self.gui.next_button.clicked.connect(self._next_roi)
         self.gui.prev_button.clicked.connect(self._prev_roi)
@@ -371,6 +371,10 @@ class Controller(QObject):
         self.check_video()
         self.plot_video_pos()
 
+    def _edit_settings(self):
+        self.settings_menu = SettingsMenu(self.data_handler)
+        self.settings_menu.show_menu()
+
     # ==================================================================================================================
     # PLOTTING
     # ------------------------------------------------------------------------------------------------------------------
@@ -379,23 +383,24 @@ class Controller(QObject):
         self.progress.setValue(val)
 
     def multi_plot(self):
-        # Prepare Data
-        data_set = self.data_handler.data.copy()
-        data_traces = []
-        for roi in data_set:
-            data_traces.append(data_set[roi]['data_traces'][self.data_handler.data_norm_mode])
+        if self.data_handler.data is not None:
+            # Prepare Data
+            data_set = self.data_handler.data.copy()
+            data_traces = []
+            for roi in data_set:
+                data_traces.append(data_set[roi]['data_traces'][self.data_handler.data_norm_mode])
 
-        # self.progress_win = QWidget()
-        self.progress = QProgressBar()
-        self.progress.setMaximum(len(data_traces))
-        self.progress.setGeometry(400, 400, 250, 20)
-        self.progress.show()
+            # self.progress_win = QWidget()
+            self.progress = QProgressBar()
+            self.progress.setMaximum(len(data_traces))
+            self.progress.setGeometry(400, 400, 250, 20)
+            self.progress.show()
 
-        self.multi_plotter = MultiPlotScrollArea(np.array(data_traces))
-        self.multi_plotter.row_finished.connect(self.progress_bar_update)
-        self.multi_plotter.start()
-        self.multi_plotter.show()
-        self.progress.close()
+            self.multi_plotter = MultiPlotScrollArea(np.array(data_traces))
+            self.multi_plotter.row_finished.connect(self.progress_bar_update)
+            self.multi_plotter.start()
+            self.multi_plotter.show()
+            self.progress.close()
 
     def update_linear_region(self):
         fr = self.data_handler.meta_data['sampling_rate']
@@ -1114,16 +1119,6 @@ class Controller(QObject):
             print('Could not find default directory')
             return None
         return file_dir
-
-    def export_noise_statistics(self):
-        if self.data_handler.data is not None:
-            stats = self.data_handler.compute_noise_statistics(p=5)
-            noise_statistics = pd.DataFrame(stats).transpose()
-            file_dir = self.select_save_file_dir(default_dir=self.settings_file.get('default_dir'), file_format='csv, (*.csv)')
-            if file_dir:
-                noise_statistics.to_csv(file_dir)
-        else:
-            QMessageBox.critical(self.gui, 'ERROR', 'Please Import Data Traces First!')
 
     def _save_file(self):
         file_dir = self.select_save_file_dir(default_dir=self.settings_file.get('default_dir'), file_format='viewer file, (*.vf)')

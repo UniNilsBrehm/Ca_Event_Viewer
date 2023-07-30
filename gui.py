@@ -118,13 +118,6 @@ class MainWindow(QMainWindow):
         self.toolbar_show_stimulus.setDisabled(True)
         # self.shortcut_toolbar_show_stimulus = QShortcut(QKeySequence('H'), self)
 
-        # Show Event Info Box Button
-        # self.toolbar_show_event_info = QAction("Hide Info Box", self)
-        # self.toolbar_show_event_info.setToolTip("Toggle Info Box (E)")
-        # self.toolbar.addAction(self.toolbar_show_event_info)
-        # self.toolbar_show_event_info.setDisabled(True)
-        # self.shortcut_toolbar_show_event_info = QShortcut(QKeySequence('E'), self)
-
         # Show Stimulus Info Box Button
         self.toolbar_show_stimulus_info = QAction("Show Stimulus Info Box", self)
         self.toolbar_show_stimulus_info.setToolTip("Toggle Info Box (J)")
@@ -222,21 +215,16 @@ class MainWindow(QMainWindow):
         self.file_menu_action_save_csv = self.file_menu.addAction('Export Results to .csv (ctrl+e)')
         self.file_menu_action_save_csv.setDisabled(True)
         self.file_menu.addSeparator()
-        self.file_menu_action_noise = self.file_menu.addAction('Compute Noise Statistics')
+        self.file_menu_action_settings = self.file_menu.addAction('Settings')
         self.file_menu.addSeparator()
         self.file_menu_action_exit = self.file_menu.addAction('Exit')
 
-        # Video Menu
-        self.video_menu = self.menu.addMenu("&Video")
-        self.video_menu_action_open_video_viewer = self.video_menu.addAction('Open Video Viewer')
+        # Tools Menu
+        self.tools_menu = self.menu.addMenu('Tools')
+        self.tools_menu_open_video_viewer = self.tools_menu.addAction('Open Video Viewer')
+        self.tools_menu_multiplot = self.tools_menu.addAction('Multi Plot')
+        self.tools_menu_video_converter = self.tools_menu.addAction('Convert Video File')
 
-        # Plot Menu
-        self.plot_menu = self.menu.addMenu("Plot")
-        self.plot_menu_action_multiplot = self.plot_menu.addAction('Multi Plot')
-
-        # Plugins Menu
-        self.plugins_menu = self.menu.addMenu("&Plugins")
-        self.plugins_menu_action_video_converter = self.plugins_menu.addAction('Convert Video File')
 
     def _setup_plot(self):
         # pyqtgraph graphic widget (for plotting later)
