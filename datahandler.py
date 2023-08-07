@@ -1,7 +1,8 @@
 import numpy as np
+import pandas as pd
 from scipy.optimize import curve_fit
 from PyQt6.QtCore import pyqtSignal, QObject
-from settings import Settings
+from settings import SettingsFile
 from IPython import embed
 """
 Data Structure:
@@ -30,14 +31,6 @@ Meta-Data Structure:
 :   ├── end
 :   ├── info
 
-:   │       ├── raw   
-    │       :
-    │       └── df
-    └── events
-            ├── event 1
-            :   ├── tau rise
-                :
-                └── tau decay
 """
 
 
@@ -47,24 +40,29 @@ class DataHandler(QObject):
     def __init__(self):
         QObject.__init__(self)
         # Create a dictionary where each roi is a key with a default dictionary that will later contain all the data
+        self.settings = SettingsFile()
         self.data_traces_key = 'data_traces'
         self.events_key = 'events'
+        self.stimulus_traces_key = 'stimulus_trace'
         self.data = None
         self.meta_data = dict()
         self.meta_data['meta_data'] = None
         self.meta_data['sampling_rate'] = None
+        self.meta_data['single_trace_sampling_rate'] = None
+        self.meta_data['single_trace_dt'] = None
         self.meta_data['roi_list'] = None
         self.meta_data['stimulus'] = dict()
         self.meta_data['stimulus']['available'] = False
         self.data_name = None
         self.roi_id = None
         self.time_axis = None
-        self.fbs_per = Settings.fbs_percentile
+        self.fbs_per = float(self.settings.get('fbs_percentile'))
         # Filter Settings
         self.filter_window = None
         self.filtered_trace = None
         self.data_norm_mode = 'raw'
         self.fitter = ExpFitter()
+        # self.single_traces = []
 
     def convert_events_to_csv(self):
         all_events = []
@@ -143,7 +141,14 @@ class DataHandler(QObject):
             else:
                 return None
 
+    def add_roi_stimulus_trace(self, roi_id, trace_time, trace_values):
+        if self.stimulus_traces_key not in self.data[roi_id]:
+            self.data[roi_id][self.stimulus_traces_key] = dict()
+        self.data[roi_id][self.stimulus_traces_key]['Time'] = trace_time
+        self.data[roi_id][self.stimulus_traces_key]['Values'] = trace_values
+
     def add_data_trace(self, data_trace, data_trace_name, roi_id):
+        # self.data[ROI_2]['data_traces']['raw']
         self.data[roi_id][self.data_traces_key][data_trace_name] = data_trace
 
         # Compute delta f over f
@@ -168,6 +173,10 @@ class DataHandler(QObject):
     def _to_df_over_f(self, raw_data):
         fbs = np.percentile(raw_data, self.fbs_per, axis=0)
         data_df = (raw_data - fbs) / fbs
+        # mean correction
+        # win = int(600 * self.meta_data['sampling_rate'])
+        # mean_trace = np.convolve(data_df, np.ones(win) / win, mode='same')
+        # data_df = data_df - mean_trace
         return fbs, data_df
 
     @staticmethod
@@ -199,7 +208,7 @@ class DataHandler(QObject):
         self.meta_data['roi_list'] = roi_list
         self.data = dict().fromkeys(roi_list)
         for key in self.data:
-            self.data[key] = {self.data_traces_key: {}, self.events_key: {}}
+            self.data[key] = {self.data_traces_key: {}, self.events_key: {}, self.stimulus_traces_key: {}}
         self.data_name = data_name
         self.meta_data['sampling_rate'] = sampling_rate
 
@@ -229,6 +238,12 @@ class DataHandler(QObject):
 
     def get_roi_events(self, roi_id):
         return self.data[roi_id][self.events_key]
+
+    def get_roi_data_trace_size(self, roi_id):
+        if self.data is not None:
+            return self.data[roi_id][self.data_traces_key][self.data_norm_mode].shape[0]
+        else:
+            return None
 
     def get_data(self, roi_id=-1):
         if roi_id == -1:

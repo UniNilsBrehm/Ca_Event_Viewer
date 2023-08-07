@@ -3,6 +3,7 @@ from PyQt6.QtCore import pyqtSignal, Qt, QEvent
 from PyQt6.QtWidgets import QMainWindow, QPushButton, QWidget, QLabel, QVBoxLayout, \
     QMessageBox, QHBoxLayout, QSlider, QComboBox, QToolBar
 import pyqtgraph as pg
+from settings import SettingsFile
 
 
 class MyToolbar(QToolBar):
@@ -23,13 +24,19 @@ class MainWindow(QMainWindow):
     def __init__(self, screen):
         super().__init__()
         self.screen = screen
+        self.settings = SettingsFile()
 
         # Filter Settings
         # Values in ms
-        self.filter_min = 0
-        self.filter_max = 10 * 1000
-        self.filter_interval = 10
-        self.filter_default = 5 * 1000
+        # self.filter_min = 0
+        # self.filter_max = 10 * 1000
+        # self.filter_interval = 10
+        # self.filter_default = 5 * 1000
+        # self.filter_on = False
+        self.filter_min = int(self.settings.get('filter_min'))
+        self.filter_max = int(self.settings.get('filter_max'))
+        self.filter_interval = int(self.settings.get('filter_interval'))
+        self.filter_default = int(self.settings.get('filter_default'))
         self.filter_on = False
 
         # Setup GUI Elements
@@ -111,19 +118,18 @@ class MainWindow(QMainWindow):
         self.toolbar_show_stimulus.setDisabled(True)
         # self.shortcut_toolbar_show_stimulus = QShortcut(QKeySequence('H'), self)
 
-        # Show Event Info Box Button
-        # self.toolbar_show_event_info = QAction("Hide Info Box", self)
-        # self.toolbar_show_event_info.setToolTip("Toggle Info Box (E)")
-        # self.toolbar.addAction(self.toolbar_show_event_info)
-        # self.toolbar_show_event_info.setDisabled(True)
-        # self.shortcut_toolbar_show_event_info = QShortcut(QKeySequence('E'), self)
-
         # Show Stimulus Info Box Button
         self.toolbar_show_stimulus_info = QAction("Show Stimulus Info Box", self)
         self.toolbar_show_stimulus_info.setToolTip("Toggle Info Box (J)")
         self.toolbar.addAction(self.toolbar_show_stimulus_info)
         self.toolbar_show_stimulus_info.setDisabled(True)
         # self.shortcut_toolbar_show_stimulus_info = QShortcut(QKeySequence('J'), self)
+
+        # Save Figure
+        self.toolbar.addSeparator()
+        self.toolbar_save_figure = QAction("Save Figure Data", self)
+        self.toolbar_save_figure.setToolTip("Save Figure Data")
+        self.toolbar.addAction(self.toolbar_save_figure)
 
         # The Mouse Position
         self.layout_labels = QHBoxLayout()
@@ -203,15 +209,22 @@ class MainWindow(QMainWindow):
         self.file_menu.addSeparator()
         self.file_menu_action_import_traces = self.file_menu.addAction('Import Data Traces (ctrl+i)')
         self.file_menu_action_import_stimulus = self.file_menu.addAction('Import Stimulus (ctrl+b)')
+        self.file_menu_action_import_stimulus_trace = self.file_menu.addAction('Import Stimulus Trace')
         self.file_menu_action_import_meta_data = self.file_menu.addAction('Import Meta Data (ctrl+m)')
         self.file_menu.addSeparator()
         self.file_menu_action_save_csv = self.file_menu.addAction('Export Results to .csv (ctrl+e)')
         self.file_menu_action_save_csv.setDisabled(True)
         self.file_menu.addSeparator()
-        self.file_menu_action_noise = self.file_menu.addAction('Compute Noise Statistics')
+        self.file_menu_action_settings = self.file_menu.addAction('Settings')
         self.file_menu.addSeparator()
-
         self.file_menu_action_exit = self.file_menu.addAction('Exit')
+
+        # Tools Menu
+        self.tools_menu = self.menu.addMenu('Tools')
+        self.tools_menu_open_video_viewer = self.tools_menu.addAction('Open Video Viewer')
+        self.tools_menu_multiplot = self.tools_menu.addAction('Multi Plot')
+        self.tools_menu_video_converter = self.tools_menu.addAction('Convert Video File')
+
 
     def _setup_plot(self):
         # pyqtgraph graphic widget (for plotting later)
@@ -224,11 +237,11 @@ class MainWindow(QMainWindow):
         # Add a plot item to initialize plot window
         # Stimulus Plot
         self.stimulus_plot_item = self.stimulus_graphics_layout_widget.addPlot(title='Stimulus', clear=True, name='stimulus')
-        self.stimulus_plot_item.setMenuEnabled(False)
+        # self.stimulus_plot_item.setMenuEnabled(False)
         self.stimulus_plot_item.hideButtons()
         # Data Plot
         self.trace_plot_item = self.plot_graphics_layout_widget.addPlot(title='Ca Data', clear=True, name='data')
-        self.trace_plot_item.setMenuEnabled(False)
+        # self.trace_plot_item.setMenuEnabled(False)
         self.trace_plot_item.hideButtons()
         self.stimulus_plot_item.setXLink(self.trace_plot_item)
 
