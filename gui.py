@@ -1,9 +1,51 @@
 from PyQt6.QtGui import QFont, QAction, QContextMenuEvent
 from PyQt6.QtCore import pyqtSignal, Qt, QEvent
 from PyQt6.QtWidgets import QMainWindow, QPushButton, QWidget, QLabel, QVBoxLayout, \
-    QMessageBox, QHBoxLayout, QSlider, QComboBox, QToolBar
+    QMessageBox, QHBoxLayout, QSlider, QComboBox, QToolBar, QLineEdit, QFileDialog, QDialog
 import pyqtgraph as pg
 from settings import SettingsFile
+
+
+class ImportDataTracesWindow(QDialog):
+    def __init__(self):
+        super().__init__()
+        self.settings = SettingsFile()
+        self.file_dir = None
+        self.sampling_rate = None
+
+        self.layout = QVBoxLayout(self)
+
+        # Drop Down Menu
+        self.combo_box = QComboBox()
+        self.combo_box.addItem('Sampling Rate [Hz]')
+        self.combo_box.addItem('Sampling dt [s]')
+        self.combo_box.setCurrentIndex(0)
+        self.combo_box.currentIndexChanged.connect(self.combo_box_changed)
+        self.line_edit = QLineEdit()
+        self.ok_button = QPushButton('Ok')
+
+        self.ok_button.clicked.connect(self.accept_input)
+
+        self.layout.addWidget(self.combo_box)
+        self.layout.addWidget(self.line_edit)
+        self.layout.addWidget(self.ok_button)
+
+        self.setWindowModality(Qt.WindowModality.ApplicationModal)
+
+    def combo_box_changed(self):
+        val = float(self.line_edit.text())
+        self.line_edit.setText(str(1/val))
+
+    def accept_input(self):
+        val = float(self.line_edit.text())
+        if self.combo_box.currentText() == 'Sampling Rate [Hz]':
+            self.sampling_rate = val
+        else:
+            self.sampling_rate = 1 / val
+        self.close()
+
+    def set_default_val(self, default_val):
+        self.line_edit.setText(str(default_val))
 
 
 class MyToolbar(QToolBar):
@@ -131,6 +173,12 @@ class MainWindow(QMainWindow):
         self.toolbar_save_figure.setToolTip("Save Figure Data")
         self.toolbar.addAction(self.toolbar_save_figure)
 
+        # Select/Flag ROI
+        self.toolbar.addSeparator()
+        self.toolbar_flag_roi = QAction("Flag ROI")
+        self.toolbar_flag_roi.setToolTip("Flag/Select ROI")
+        self.toolbar.addAction(self.toolbar_flag_roi)
+
         # The Mouse Position
         self.layout_labels = QHBoxLayout()
         self.mouse_label = QLabel(f"<p style='color:black'>X： {0} <br> Y: {0}</p>")
@@ -214,6 +262,8 @@ class MainWindow(QMainWindow):
         self.file_menu.addSeparator()
         self.file_menu_action_save_csv = self.file_menu.addAction('Export Results to .csv (ctrl+e)')
         self.file_menu_action_save_csv.setDisabled(True)
+        self.file_menu_action_save_flags = self.file_menu.addAction('Export ROI Flags')
+        self.file_menu_action_save_flags.setDisabled(True)
         self.file_menu.addSeparator()
         self.file_menu_action_settings = self.file_menu.addAction('Settings')
         self.file_menu.addSeparator()
@@ -224,7 +274,6 @@ class MainWindow(QMainWindow):
         self.tools_menu_open_video_viewer = self.tools_menu.addAction('Open Video Viewer')
         self.tools_menu_multiplot = self.tools_menu.addAction('Multi Plot')
         self.tools_menu_video_converter = self.tools_menu.addAction('Convert Video File')
-
 
     def _setup_plot(self):
         # pyqtgraph graphic widget (for plotting later)

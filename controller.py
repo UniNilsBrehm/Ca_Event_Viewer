@@ -1,4 +1,5 @@
 import os
+import time
 from time import perf_counter
 import pickle
 from zipfile import ZipFile
@@ -15,6 +16,7 @@ import pyqtgraph.exporters
 from video_viewer import VideoViewer
 from video_converter import VideoConverter
 from multi_trace_plot import MultiPlotScrollArea
+from gui import ImportDataTracesWindow
 # from IPython import embed
 
 
@@ -174,6 +176,8 @@ class Controller(QObject):
         self.stimulus_dt = 0.001
         self.multi_plotter = None
 
+        self.get_sampling_rate_window = None
+
     def _start_new_session(self):
         self.gui.info_label.setText('Please Open Data File ...')
         self.clear_plots()
@@ -220,6 +224,7 @@ class Controller(QObject):
         self.gui.toolbar_show_stimulus.setDisabled(True)
         self.gui.toolbar_show_stimulus_info.setDisabled(True)
         self.gui.file_menu_action_save_csv.setDisabled(False)
+        self.gui.file_menu_action_save_flags.setDisabled(False)
         self.gui.file_menu_action_save_viewer_file.setDisabled(False)
         self.gui.trace_plot_item.setLabel('left', 'Raw', **PlottingStyles.axis_label_styles)
         self.gui.toolbar_fbs_trace_action.setDisabled(False)
@@ -264,9 +269,12 @@ class Controller(QObject):
         self.gui.file_menu_action_new_session.triggered.connect(self._start_new_session)
         self.gui.file_menu_action_import_traces.triggered.connect(self.import_traces_from_csv)
         self.gui.file_menu_action_import_stimulus.triggered.connect(self.import_stimulus)
-        self.gui.file_menu_action_import_stimulus_trace.triggered.connect(self.import_single_trace)
+        # self.gui.file_menu_action_import_stimulus_trace.triggered.connect(self.import_single_trace)
+        self.gui.file_menu_action_import_stimulus_trace.triggered.connect(self.import_extra_trace)
+
         self.gui.file_menu_action_import_meta_data.triggered.connect(self.import_meta_data)
         self.gui.file_menu_action_save_csv.triggered.connect(self.export_results)
+        self.gui.file_menu_action_save_flags.triggered.connect(self.export_flags)
         self.gui.file_menu_action_open_viewer_file.triggered.connect(self._load_file)
         self.gui.file_menu_action_save_viewer_file.triggered.connect(self._save_file)
         self.gui.file_menu_action_settings.triggered.connect(self._edit_settings)
@@ -299,6 +307,7 @@ class Controller(QObject):
         self.gui.toolbar_fbs_trace_action.triggered.connect(self.toggle_base_line_trace)
         self.gui.toolbar_min_max_action.triggered.connect(self._set_to_min_max)
         self.gui.toolbar_save_figure.triggered.connect(self.collect_events_for_plotting)
+        self.gui.toolbar_flag_roi.triggered.connect(self.flag_roi)
         # self.gui.toolbar_save_figure.triggered.connect(self.save_figure)
 
         # Filter
@@ -457,6 +466,10 @@ class Controller(QObject):
         # item when doing auto-range calculations.
         self.gui.trace_plot_item.addItem(self.linear_region, ignoreBounds=True)
         # self.update_plot(update_axis=False, clear=False)
+
+    def plot_extra_traces(self):
+        if self.data_handler.data[self.data_handler.roi_id]:
+            print('')
 
     def update_plot(self, update_axis=False, clear=True):
         # Clear the plot
@@ -924,6 +937,34 @@ class Controller(QObject):
     # ==================================================================================================================
     # I/O
     # ------------------------------------------------------------------------------------------------------------------
+    def export_flags(self):
+        file_dir = self.select_save_file_dir(default_dir=self.settings_file.get('default_dir'),
+                                             file_format='csv file, (*.csv)')
+
+        if file_dir:
+            # Get Dict
+            flags = self.data_handler.meta_data['roi_flags']
+            flagged_rois_ls = []
+            for roi in flags:
+                if not flags[roi]:
+                    flagged_rois_ls.append(roi)
+            flagged_rois = pd.DataFrame(flagged_rois_ls)
+            flagged_rois.columns = ['ROI']
+            flagged_rois.to_csv(file_dir)
+
+    def flag_roi(self):
+        roi = self.data_handler.roi_id
+        flag = np.invert(self.data_handler.meta_data['roi_flags'][roi])
+        self.data_handler.meta_data['roi_flags'][roi] = flag
+        self.check_flag()
+
+    def check_flag(self):
+        flag = self.data_handler.meta_data['roi_flags'][self.data_handler.roi_id]
+        if flag:
+            self.gui.toolbar_flag_roi.setText('Flag ROI')
+        else:
+            self.gui.toolbar_flag_roi.setText('Unflag ROI')
+
     def open_video_converter(self):
         self.video_converter.show()
         print('VIDEO CONVERTER')
@@ -1017,6 +1058,62 @@ class Controller(QObject):
         else:
             QMessageBox.critical(self.gui, 'ERROR', 'Please Import Data Traces First!')
 
+    def import_extra_trace(self):
+        if self.data_handler.data is not None:
+            # Set the desired file format
+            file_format = 'csv file, (*.csv)'
+            # Let the User choose a file
+            file_dir = self.get_a_file_dir(default_dir=self.settings_file.get('default_dir'), file_format=file_format)
+            if file_dir:
+                roi_list = self.data_handler.meta_data['roi_list']
+                extra_trace_df = pd.read_csv(file_dir, index_col=False)
+                headers = list(extra_trace_df.keys())
+                if 'Time' in headers or 'time' in headers:
+                    if 'Time' in headers:
+                        time_header = 'Time'
+                    else:
+                        time_header = 'time'
+                    # There is a time axis
+                    data = extra_trace_df.loc[:, extra_trace_df.columns != time_header].to_dict(orient='list')
+                    # Check if ROIS match ROIS from data traces
+                    check = roi_list == list(data.keys())
+                    if not check:
+                        QMessageBox.critical(self.gui, 'ERROR', 'ROIs do not match!')
+                        return False
+                    time_axis = extra_trace_df[time_header].to_list()
+                    # Compute Sampling Rate
+                    t_max = time_axis[-1]
+                    sampling_rate = len(time_axis) / t_max
+                else:
+                    # There is no time axis
+                    # Get Sampling Rate from User: Let User choose to give rate or dt
+                    sampling_rate_default = str(self.settings_file.get('sampling_rate'))
+                    self.get_sampling_rate_window = ImportDataTracesWindow()
+                    self.get_sampling_rate_window.set_default_val(default_val=sampling_rate_default)
+                    self.get_sampling_rate_window.exec()
+
+                    sampling_rate = self.get_sampling_rate_window.sampling_rate
+                    sampling_dt = 1 / self.get_sampling_rate_window.sampling_rate
+
+                    data = extra_trace_df.to_dict(orient='list')
+                    # Check if ROIS match ROIS from data traces
+                    check = self.data_handler.meta_data['roi_list'] == list(data.keys())
+                    if not check:
+                        QMessageBox.critical(self.gui, 'ERROR', 'ROIs do not match!')
+                        return False
+
+                    # Create time axis with sampling rate
+                    max_time = extra_trace_df.shape[0] * sampling_dt
+                    time_axis = np.linspace(0, max_time, extra_trace_df.shape[0])
+
+                # Add single traces to data handler
+                unique_id = str(time.time_ns())
+                for roi in roi_list:
+                    self.data_handler.add_extra_trace(name=unique_id, values=data[roi], time=time_axis, roi=roi, fr=sampling_rate)
+                self.update_plot(update_axis=False)
+        else:
+            QMessageBox.critical(self.gui, 'ERROR', 'Please Import Data Traces First!')
+
     def export_results(self):
         file_dir = self.select_save_file_dir(default_dir=self.settings_file.get('default_dir'), file_format='csv, (*.csv)')
         if self.data_handler.data is not None and file_dir:
@@ -1060,15 +1157,16 @@ class Controller(QObject):
         else:
             QMessageBox.critical(self.gui, 'ERROR', 'Please Import Data Traces First!')
 
-    def import_traces_from_csv(self):
+    def import_traces_from_csv2(self):
         # Set the desired file format
         file_format = 'csv file, (*.csv)'
         # Let the User choose a file
         file_dir = self.get_a_file_dir(default_dir=self.settings_file.get('default_dir'), file_format=file_format)
         if file_dir:
             # Get Sampling Rate from User
-            # sampling_rate_default = str(Settings.sampling_dt)
+            # Let User choose to give rate or dt
             sampling_rate_default = str(self.settings_file.get('sampling_dt'))
+
             sampling_rate_str, ok_pressed = QInputDialog.getText(
                 self.gui, "Enter dt", "dt [s]:", QLineEdit.EchoMode.Normal, sampling_rate_default)
             if ok_pressed and sampling_rate_str:
@@ -1083,6 +1181,46 @@ class Controller(QObject):
                 return False
 
             self.settings_file.modify_setting('sampling_dt', sampling_dt)
+            self.settings_file.save_settings()
+
+            # Open the csv file using pandas
+            csv_file = pd.read_csv(file_dir, index_col=False)
+            data_name = os.path.split(file_dir)[1][:-4]
+
+            # Start a new session
+            self._start_new_session()
+            # self.data_handler.sampling_rate = sampling_rate
+            # Create a new data set
+            roi_list = list(csv_file.keys())
+            self.data_handler.create_new_data_set(roi_list=roi_list, data_name=data_name, sampling_rate=sampling_rate)
+
+            # Fill data set with traces in the csv file
+            for key in csv_file:
+                trace = csv_file[key]
+                self.data_handler.add_data_trace(trace.to_numpy(), 'raw', key)
+
+            self.data_handler.change_roi(roi_list[0])
+            self.prepare_new_data()
+
+    def import_traces_from_csv(self):
+        # Set the desired file format
+        file_format = 'csv file, (*.csv)'
+        # Let the User choose a file
+        file_dir = self.get_a_file_dir(default_dir=self.settings_file.get('default_dir'), file_format=file_format)
+        if file_dir:
+            # Get Sampling Rate from User
+            # Let User choose to give rate or dt
+            sampling_rate_default = str(self.settings_file.get('sampling_rate'))
+            self.get_sampling_rate_window = ImportDataTracesWindow()
+            self.get_sampling_rate_window.set_default_val(default_val=sampling_rate_default)
+            self.get_sampling_rate_window.exec()
+
+            sampling_rate = self.get_sampling_rate_window.sampling_rate
+            sampling_dt = 1 / self.get_sampling_rate_window.sampling_rate
+
+            self.settings_file.modify_setting('sampling_rate', sampling_rate)
+            self.settings_file.modify_setting('sampling_dt', sampling_dt)
+
             self.settings_file.save_settings()
 
             # Open the csv file using pandas
@@ -1196,6 +1334,8 @@ class Controller(QObject):
             roi_id = self.data_handler.meta_data['roi_list'][roi_id_nr]
             self.data_handler.change_roi(roi_id)
             self.gui.roi_selection_combobox.setCurrentIndex(roi_id_nr)
+            # check roi flag status
+            self.check_flag()
 
     def _prev_roi(self):
         if self.data_handler.data is not None:
@@ -1205,6 +1345,8 @@ class Controller(QObject):
             self.data_handler.change_roi(roi_id)
             # self.data_handler.moving_average_filter()
             self.gui.roi_selection_combobox.setCurrentIndex(roi_id_nr)
+            # check roi flag status
+            self.check_flag()
 
     def _set_to_min_max(self):
         self.data_handler.data_norm_mode = 'min_max'

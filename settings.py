@@ -49,8 +49,10 @@ class SettingsFile:
         else:
             self.settings_file = pd.DataFrame(columns=['Value'])
             self.settings_file.loc['ffmpeg'] = 'NaN'
-            self.settings_file.loc['sampling_dt'] = 0.002
-            self.settings_file.loc['stimulus_sampling_dt'] = 0.01666666666666
+            self.settings_file.loc['sampling_rate'] = 10
+            self.settings_file.loc['sampling_dt'] = 1 / self.settings_file.loc['sampling_rate']
+            self.settings_file.loc['stimulus_sampling_rate'] = 100
+            self.settings_file.loc['stimulus_sampling_dt'] = 1 / self.settings_file.loc['stimulus_sampling_rate']
             self.settings_file.loc['fbs_percentile'] = 5
             self.settings_file.loc['default_dir'] = 'C:/'
             # Filter Settings
