@@ -7,14 +7,41 @@ from IPython import embed
 """
 Data Structure:
 .
-├── data_trace (each column is a ROI)
+├── ca_data_traces (each column is a ROI) -- This is for Ca Imaging Data
 │   ├── raw 
-    ├── df over f
-    :
-    └── time axis
-            
-                
-                
+│   ├── df over f
+│   ├── norm min/max
+│   ├── z score
+│   ├── metadata
+│   ├── roi_list
+│   ├── sampling_rate
+│   ├── events (This is a data frame in long format)
+│   └── time axis
+│
+├── extra_traces (each column is a ROI)
+│   ├── trace_01 
+│   :       ├── values 
+│   :       ├── time axis         
+│   :       ├── roi_list
+│   :       ├── sampling_rate
+│   :       └── metadata         
+│   :
+│   └── trace_nn
+│    
+├── stimulus_traces (each column is a ROI)
+│   ├── values 
+│   ├── roi_list
+│   └── time axis                            
+│
+└── stimulus_protocol
+    ├── values
+    ├── time
+    ├── start
+    ├── end
+    └── info
+
+========================================================================================================================
+    
 Data Structure:
 .
 ├── roi 1

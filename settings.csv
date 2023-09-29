@@ -1,7 +1,7 @@
 ,Value
-ffmpeg,
-sampling_rate,2.416112572
-sampling_dt,0.4138879999172489
+ffmpeg,C:/FFmpegTool/bin/ffmpeg.exe
+sampling_rate,2.415
+sampling_dt,0.41407867494824013
 stimulus_sampling_rate,100
 stimulus_sampling_dt,0.01
 fbs_percentile,5
