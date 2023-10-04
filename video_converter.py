@@ -160,10 +160,10 @@ class VideoConverter(QMainWindow):
             input_cmd = self.ffmpeg_input_opt[hw]
             # output_cmd = self.ffmpeg_output_opt[hw][speed]
             output_cmd = self.ffmpeg_output_opt[hw]
-            print(input_cmd)
-            print('')
-            print(output_cmd)
-            print('')
+            # print(input_cmd)
+            # print('')
+            # print(output_cmd)
+            # print('')
             if self.supress_terminal_output:
                 global_settings = self.ffmpeg_global_opt['supress']
             else:
