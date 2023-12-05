@@ -247,7 +247,7 @@ class VideoViewer(QMainWindow):
             if self.current_frame >= self.total_frames:
                 self.current_frame = 0
             self.change_frame(self.current_frame)
-            # self.FrameChanged.emit()
+            self.FrameChanged.emit()
             self.frame_slider.setValue(self.current_frame)
 
     def change_frame(self, frame):
@@ -256,7 +256,7 @@ class VideoViewer(QMainWindow):
             if self.current_frame >= self.total_frames:
                 self.current_frame = 0
 
-            # self.FrameChanged.emit()
+            self.FrameChanged.emit()
             if self.is_tiff:
                 self.video_frame = self.captured_video.pages.get(self.current_frame).asarray()
                 if self.roi_circle is not None:
@@ -341,152 +341,152 @@ class VideoViewer(QMainWindow):
             self.close_file()
             self._reset_video_viewer()
 
-
-class VideoViewerQT(QMainWindow):
-    FrameChanged = pyqtSignal()
-    VideoLoaded = pyqtSignal()
-    ConnectToDataTrace = pyqtSignal(bool)
-
-    def __init__(self):
-        super().__init__()
-
-        self.setWindowTitle("Video Viewer")
-        self.setGeometry(100, 100, 800, 600)
-        self.setMinimumSize(800, 600)
-
-        # Create the main widget and layout
-        self.central_widget = QWidget(self)
-        self.setCentralWidget(self.central_widget)
-        self.layout = QVBoxLayout(self.central_widget)
-
-        # Create the video frame viewer
-        self.video_label = QLabel(f'Please Open A Video File')
-        self.speed_label = QLabel('')
-
-        self.video_widget = QVideoWidget(self)
-
-        # self.layout.addWidget(self.video_label)
-        # self.layout.addWidget(self.speed_label)
-        self.layout.addWidget(self.video_widget)
-
-        # Create the control widgets
-        self.controls_layout = QVBoxLayout()
-        self.control_button_layout = QHBoxLayout()
-
-        # Buttons
-        self.open_button = QPushButton("Open Video", self)
-        self.open_button.clicked.connect(self.open_file_dialog)
-        self.control_button_layout.addWidget(self.open_button)
-
-        self.play_button = QPushButton("Play", self)
-        self.play_button.clicked.connect(self.play_video)
-        self.control_button_layout.addWidget(self.play_button)
-
-        self.pause_button = QPushButton("Pause", self)
-        self.pause_button.clicked.connect(self.pause_video)
-        self.control_button_layout.addWidget(self.pause_button)
-
-        self.stop_button = QPushButton("Stop", self)
-        self.stop_button.clicked.connect(self.stop_video)
-        self.control_button_layout.addWidget(self.stop_button)
-
-        self.faster_button = QPushButton("Faster", self)
-        # self.faster_button.clicked.connect(self.speed_up)
-        self.control_button_layout.addWidget(self.faster_button)
-
-        self.slower_button = QPushButton("Slower", self)
-        # self.slower_button.clicked.connect(self.slow_down)
-        self.control_button_layout.addWidget(self.slower_button)
-
-        self.rotate_button = QPushButton("Rotate", self)
-        # self.rotate_button.clicked.connect(self.rotate_video)
-        self.control_button_layout.addWidget(self.rotate_button)
-
-        self.connect_video_to_data_trace_button = QPushButton("Connect to Data", self)
-        # self.connect_video_to_data_trace_button.clicked.connect(self.connect_to_data_trace)
-        self.control_button_layout.addWidget(self.connect_video_to_data_trace_button)
-
-        # Slider
-        self.frame_slider = QSlider(Qt.Orientation.Horizontal, self)
-        self.frame_slider.setTickPosition(QSlider.TickPosition.TicksBothSides)
-        self.frame_slider.setTickInterval(1)
-        self.frame_slider.valueChanged.connect(self.change_frame)
-
-        self.control_button_layout.addWidget(self.frame_slider)
-
-        self.current_frame_label = QLabel("Current Frame: 0", self)
-        self.control_button_layout.addWidget(self.current_frame_label)
-
-        self.controls_layout.addWidget(self.frame_slider)
-        self.controls_layout.addLayout(self.control_button_layout)
-        self.layout.addLayout(self.controls_layout)
-
-        # Disabled Buttons for start up
-        self.set_button_state(True)
-        self.media_player = QMediaPlayer()
-        self.media_player.setVideoOutput(self.video_widget)
-        self.media_player.positionChanged.connect(self.update_position)
-        self.media_player.durationChanged.connect(self.update_duration)
-        # self.mediaPlayer.playbackStateChanged.connect(self.mediaStateChanged)
-        # self.mediaPlayer.errorChanged.connect(self.handleError)
-
-    def open_file_dialog(self):
-        input_file, _ = QFileDialog.getOpenFileName(
-            self, "Select Input File", "",
-            "Video Files (*.mp4; *.avi; *.mkv; *.mpeg; *.mpg; *.tif; *.tiff *.TIF; *.TIFF)")
-        if input_file:
-            self._load_video(input_file)
-
-    def _load_video(self, video_file):
-        self.video_file = video_file
-        self.current_frame = 0
-        self.total_frames = 0
-        self.media_player.setSource(QUrl.fromLocalFile(self.video_file))
-        self.video_widget.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatio)
-        # Activate Buttons (False: Show Buttons)
-        self.set_button_state(False)
-        self.VideoLoaded.emit()
-
-    def set_button_state(self, state):
-        self.frame_slider.setDisabled(state)
-        self.play_button.setDisabled(state)
-        self.pause_button.setDisabled(state)
-        self.stop_button.setDisabled(state)
-        self.rotate_button.setDisabled(state)
-        self.faster_button.setDisabled(state)
-        self.slower_button.setDisabled(state)
-        self.connect_video_to_data_trace_button.setDisabled(state)
-
-    def play_video(self):
-        if self.media_player.playbackState() == QMediaPlayer.PlaybackState.PausedState or self.media_player.playbackState() == QMediaPlayer.PlaybackState.StoppedState:
-            self.media_player.play()
-            print('PLAY')
-
-    def pause_video(self):
-        if self.media_player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
-            self.media_player.pause()
-
-    def stop_video(self):
-        if self.media_player.playbackState() != QMediaPlayer.PlaybackState.StoppedState:
-            self.media_player.stop()
-
-    def change_frame(self, frame):
-        self.media_player.setPosition(frame)
-
-    def connect_to_data_trace(self):
-        if not self.connected_to_data_trace:
-            self.connected_to_data_trace = True
-            self.connect_video_to_data_trace_button.setText("Disconnect")
-        else:
-            self.connected_to_data_trace = False
-            self.connect_video_to_data_trace_button.setText("Connect to Data")
-        self.ConnectToDataTrace.emit(self.connected_to_data_trace)
-
-    def update_position(self, position):
-        self.frame_slider.setValue(position)
-
-    def update_duration(self, duration):
-        self.frame_slider.setRange(0, duration)
-
-    def set_position(self, position):
-        self.media_player.setPosition(position)
+#
+# class VideoViewerQT(QMainWindow):
+#     FrameChanged = pyqtSignal()
+#     VideoLoaded = pyqtSignal()
+#     ConnectToDataTrace = pyqtSignal(bool)
+#
+#     def __init__(self):
+#         super().__init__()
+#
+#         self.setWindowTitle("Video Viewer")
+#         self.setGeometry(100, 100, 800, 600)
+#         self.setMinimumSize(800, 600)
+#
+#         # Create the main widget and layout
+#         self.central_widget = QWidget(self)
+#         self.setCentralWidget(self.central_widget)
+#         self.layout = QVBoxLayout(self.central_widget)
+#
+#         # Create the video frame viewer
+#         self.video_label = QLabel(f'Please Open A Video File')
+#         self.speed_label = QLabel('')
+#
+#         self.video_widget = QVideoWidget(self)
+#
+#         # self.layout.addWidget(self.video_label)
+#         # self.layout.addWidget(self.speed_label)
+#         self.layout.addWidget(self.video_widget)
+#
+#         # Create the control widgets
+#         self.controls_layout = QVBoxLayout()
+#         self.control_button_layout = QHBoxLayout()
+#
+#         # Buttons
+#         self.open_button = QPushButton("Open Video", self)
+#         self.open_button.clicked.connect(self.open_file_dialog)
+#         self.control_button_layout.addWidget(self.open_button)
+#
+#         self.play_button = QPushButton("Play", self)
+#         self.play_button.clicked.connect(self.play_video)
+#         self.control_button_layout.addWidget(self.play_button)
+#
+#         self.pause_button = QPushButton("Pause", self)
+#         self.pause_button.clicked.connect(self.pause_video)
+#         self.control_button_layout.addWidget(self.pause_button)
+#
+#         self.stop_button = QPushButton("Stop", self)
+#         self.stop_button.clicked.connect(self.stop_video)
+#         self.control_button_layout.addWidget(self.stop_button)
+#
+#         self.faster_button = QPushButton("Faster", self)
+#         # self.faster_button.clicked.connect(self.speed_up)
+#         self.control_button_layout.addWidget(self.faster_button)
+#
+#         self.slower_button = QPushButton("Slower", self)
+#         # self.slower_button.clicked.connect(self.slow_down)
+#         self.control_button_layout.addWidget(self.slower_button)
+#
+#         self.rotate_button = QPushButton("Rotate", self)
+#         # self.rotate_button.clicked.connect(self.rotate_video)
+#         self.control_button_layout.addWidget(self.rotate_button)
+#
+#         self.connect_video_to_data_trace_button = QPushButton("Connect to Data", self)
+#         # self.connect_video_to_data_trace_button.clicked.connect(self.connect_to_data_trace)
+#         self.control_button_layout.addWidget(self.connect_video_to_data_trace_button)
+#
+#         # Slider
+#         self.frame_slider = QSlider(Qt.Orientation.Horizontal, self)
+#         self.frame_slider.setTickPosition(QSlider.TickPosition.TicksBothSides)
+#         self.frame_slider.setTickInterval(1)
+#         self.frame_slider.valueChanged.connect(self.change_frame)
+#
+#         self.control_button_layout.addWidget(self.frame_slider)
+#
+#         self.current_frame_label = QLabel("Current Frame: 0", self)
+#         self.control_button_layout.addWidget(self.current_frame_label)
+#
+#         self.controls_layout.addWidget(self.frame_slider)
+#         self.controls_layout.addLayout(self.control_button_layout)
+#         self.layout.addLayout(self.controls_layout)
+#
+#         # Disabled Buttons for start up
+#         self.set_button_state(True)
+#         self.media_player = QMediaPlayer()
+#         self.media_player.setVideoOutput(self.video_widget)
+#         self.media_player.positionChanged.connect(self.update_position)
+#         self.media_player.durationChanged.connect(self.update_duration)
+#         # self.mediaPlayer.playbackStateChanged.connect(self.mediaStateChanged)
+#         # self.mediaPlayer.errorChanged.connect(self.handleError)
+#
+#     def open_file_dialog(self):
+#         input_file, _ = QFileDialog.getOpenFileName(
+#             self, "Select Input File", "",
+#             "Video Files (*.mp4; *.avi; *.mkv; *.mpeg; *.mpg; *.tif; *.tiff *.TIF; *.TIFF)")
+#         if input_file:
+#             self._load_video(input_file)
+#
+#     def _load_video(self, video_file):
+#         self.video_file = video_file
+#         self.current_frame = 0
+#         self.total_frames = 0
+#         self.media_player.setSource(QUrl.fromLocalFile(self.video_file))
+#         self.video_widget.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatio)
+#         # Activate Buttons (False: Show Buttons)
+#         self.set_button_state(False)
+#         self.VideoLoaded.emit()
+#
+#     def set_button_state(self, state):
+#         self.frame_slider.setDisabled(state)
+#         self.play_button.setDisabled(state)
+#         self.pause_button.setDisabled(state)
+#         self.stop_button.setDisabled(state)
+#         self.rotate_button.setDisabled(state)
+#         self.faster_button.setDisabled(state)
+#         self.slower_button.setDisabled(state)
+#         self.connect_video_to_data_trace_button.setDisabled(state)
+#
+#     def play_video(self):
+#         if self.media_player.playbackState() == QMediaPlayer.PlaybackState.PausedState or self.media_player.playbackState() == QMediaPlayer.PlaybackState.StoppedState:
+#             self.media_player.play()
+#             print('PLAY')
+#
+#     def pause_video(self):
+#         if self.media_player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+#             self.media_player.pause()
+#
+#     def stop_video(self):
+#         if self.media_player.playbackState() != QMediaPlayer.PlaybackState.StoppedState:
+#             self.media_player.stop()
+#
+#     def change_frame(self, frame):
+#         self.media_player.setPosition(frame)
+#
+#     def connect_to_data_trace(self):
+#         if not self.connected_to_data_trace:
+#             self.connected_to_data_trace = True
+#             self.connect_video_to_data_trace_button.setText("Disconnect")
+#         else:
+#             self.connected_to_data_trace = False
+#             self.connect_video_to_data_trace_button.setText("Connect to Data")
+#         self.ConnectToDataTrace.emit(self.connected_to_data_trace)
+#
+#     def update_position(self, position):
+#         self.frame_slider.setValue(position)
+#
+#     def update_duration(self, duration):
+#         self.frame_slider.setRange(0, duration)
+#
+#     def set_position(self, position):
+#         self.media_player.setPosition(position)

@@ -662,7 +662,7 @@ class Controller(QObject):
                 # Get current video frame
                 y_point = y_data[current_video_frame]
                 current_video_time = current_video_frame / self.data_handler.meta_data['sampling_rate']
-
+                print(f'video time: {current_video_time}')
                 # Plot the current Time Point on the data trace
                 scatter_item = pg.ScatterPlotItem(
                     [current_video_time], [y_point],
