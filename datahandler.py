@@ -7,11 +7,55 @@ from IPython import embed
 """
 Data Structure:
 .
+├── ca_data_traces (each column is a ROI) -- This is for Ca Imaging Data
+│   ├── raw 
+│   ├── df over f
+│   ├── norm min/max
+│   ├── z score
+│   ├── metadata
+│   ├── roi_list
+│   ├── sampling_rate
+│   ├── events (This is a data frame in long format)
+│   └── time axis
+│
+├── extra_traces (each column is a ROI)
+│   ├── trace_01 
+│   :       ├── values 
+│   :       ├── time axis         
+│   :       ├── roi_list
+│   :       ├── sampling_rate
+│   :       └── metadata         
+│   :
+│   └── trace_nn
+│    
+├── stimulus_traces (each column is a ROI)
+│   ├── values 
+│   ├── roi_list
+│   └── time axis                            
+│
+└── stimulus_protocol
+    ├── values
+    ├── time
+    ├── start
+    ├── end
+    └── info
+
+========================================================================================================================
+    
+Data Structure:
+.
 ├── roi 1
 │   ├── data_traces
 :   │       ├── raw   
     │       :
     │       └── df
+    ├── extra_traces
+    │       ├── trace_1   
+    │       :    ├── values
+    │       :    ├── time    
+    │       :    └── sampling_rate
+    │       
+    │
     └── events
             ├── event 1
             :   ├── tau rise
@@ -42,11 +86,13 @@ class DataHandler(QObject):
         # Create a dictionary where each roi is a key with a default dictionary that will later contain all the data
         self.settings = SettingsFile()
         self.data_traces_key = 'data_traces'
+        self.extra_traces_key = 'extra_traces'
         self.events_key = 'events'
         self.stimulus_traces_key = 'stimulus_trace'
         self.data = None
         self.meta_data = dict()
         self.meta_data['meta_data'] = None
+        self.meta_data['roi_flags'] = None
         self.meta_data['sampling_rate'] = None
         self.meta_data['single_trace_sampling_rate'] = None
         self.meta_data['single_trace_dt'] = None
@@ -88,6 +134,12 @@ class DataHandler(QObject):
                         event.update(self.meta_data['meta_data'])
                     all_events.append(event)
         return all_events
+
+    def add_extra_trace(self, name, values, time, fr, roi):
+        self.data[roi][self.extra_traces_key][name] = dict()
+        self.data[roi][self.extra_traces_key][name]['values'] = values
+        self.data[roi][self.extra_traces_key][name]['time'] = time
+        self.data[roi][self.extra_traces_key][name]['sampling_rate'] = fr
 
     def add_meta_data(self, meta_data):
         self.meta_data['meta_data'] = meta_data
@@ -203,12 +255,22 @@ class DataHandler(QObject):
         self.time_axis = self.convert_samples_to_time(data_size, self.meta_data['sampling_rate'])
         return self.time_axis
 
+    def create_flags(self):
+        roi_list = self.meta_data['roi_list']
+        self.meta_data['roi_flags'] = dict().fromkeys(roi_list, True)
+
     def create_new_data_set(self, roi_list, data_name, sampling_rate):
         # Create an empty data set
         self.meta_data['roi_list'] = roi_list
+        self.meta_data['roi_flags'] = dict().fromkeys(roi_list, True)
         self.data = dict().fromkeys(roi_list)
         for key in self.data:
-            self.data[key] = {self.data_traces_key: {}, self.events_key: {}, self.stimulus_traces_key: {}}
+            self.data[key] = {
+                self.data_traces_key: {},
+                self.events_key: {},
+                self.stimulus_traces_key: {},
+                self.extra_traces_key: {}
+            }
         self.data_name = data_name
         self.meta_data['sampling_rate'] = sampling_rate
 
@@ -280,8 +342,13 @@ class DataHandler(QObject):
         return self.data[roi_id][self.data_traces_key]
 
     def load_new_data_set(self, data, meta_data):
-        self.data = data
-        self.meta_data = meta_data
+        if self.meta_data['roi_flags'] is None:
+            self.data = data
+            self.meta_data = meta_data
+            self.create_flags()
+        else:
+            self.data = data
+            self.meta_data = meta_data
 
 
 class ExpFitter:

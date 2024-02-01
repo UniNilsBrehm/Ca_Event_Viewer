@@ -1,6 +1,6 @@
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QFileDialog, QLabel, QCheckBox,\
-    QComboBox, QApplication
+    QComboBox, QApplication, QDoubleSpinBox
 # from IPython import embed
 import ffmpy
 
@@ -17,6 +17,10 @@ class VideoConverter(QMainWindow):
         self.settings = convert_settings
         self.input_file = None
         self.output_file = None
+
+        self.crf_value = 17
+        self.preset = 'superfast'
+        self.output_frame_rate = 0
 
         # Create a central widget and layout
         central_widget = QWidget()
@@ -57,9 +61,18 @@ class VideoConverter(QMainWindow):
         supress_terminal_output_layout.addWidget(self.supress_terminal_output_check_box)
 
         self.quality_combo_box = QComboBox()
-        self.quality_combo_box.addItem('fast')
+        self.quality_combo_box.addItem('superfast')
         self.quality_combo_box.addItem('medium')
-        self.quality_combo_box.addItem('slow')
+        self.quality_combo_box.addItem('slower')
+        self.quality_combo_box_label = QLabel('Compression Preset')
+
+        self.constant_rate_factor = QDoubleSpinBox()
+        self.constant_rate_factor.setValue(self.crf_value)
+        self.constant_rate_factor_label = QLabel('Video Quality: CRF (visually lossless=17, technically lossless=0)(range: 0-51)')
+
+        self.change_frame_rate = QDoubleSpinBox()
+        self.change_frame_rate.setValue(0)
+        self.change_frame_rate_label = QLabel('Output Frame Rate (Hz) (will be ignored if set to 0)')
 
         self.status_label = QLabel('Ready')
 
@@ -74,7 +87,17 @@ class VideoConverter(QMainWindow):
         layout.addSpacing(5)
         layout.addLayout(supress_terminal_output_layout)
         layout.addSpacing(10)
+        layout.addWidget(self.quality_combo_box_label)
+        layout.addSpacing(5)
         layout.addWidget(self.quality_combo_box)
+        layout.addSpacing(20)
+        layout.addWidget(self.constant_rate_factor_label)
+        layout.addSpacing(5)
+        layout.addWidget(self.constant_rate_factor)
+        layout.addSpacing(20)
+        layout.addWidget(self.change_frame_rate_label)
+        layout.addSpacing(5)
+        layout.addWidget(self.change_frame_rate)
         layout.addSpacing(20)
         layout.addWidget(self.start_button)
         layout.addSpacing(10)
@@ -90,18 +113,25 @@ class VideoConverter(QMainWindow):
     def _define_ffmpeg_settings(self):
         self.ffmpeg_input_opt = {'gpu': ['-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda'], 'cpu': None}
 
-        self.ffmpeg_output_opt = {
-            'gpu': {
-                'fast': ['-c:v', 'h264_nvenc', '-preset', 'superfast', '-qp', '17'],
-                'medium': ['-c:v', 'h264_nvenc', '-preset', 'medium', '-qp', '17'],
-                'slow': ['-c:v', 'h264_nvenc', '-preset', 'slower', '-qp', '17'],
-            },
-            'cpu': {
-                'fast': ['-c:v', 'libx264', '-preset', 'superfast', '-crf', '17'],
-                'medium': ['-c:v', 'libx264', '-preset', 'medium', '-crf', '17'],
-                'slow': ['-c:v', 'libx264', '-preset', 'slower', '-crf', '17'],
+        # Get Values
+        self.crf_value = int(self.constant_rate_factor.value())
+        self.preset = self.quality_combo_box.currentText()
+        self.output_frame_rate = int(self.change_frame_rate.value())
+
+        if self.crf_value > 51:
+            self.crf_value = 51
+
+        if self.output_frame_rate > 0:
+            self.ffmpeg_output_opt = {
+                'gpu': ['-c:v', 'h264_nvenc', '-preset', self.preset, '-qp', str(self.crf_value), '-filter:v', f'fps={self.output_frame_rate}'],
+                'cpu': ['-c:v', 'libx264', '-preset', self.preset, '-crf', str(self.crf_value), '-filter:v', f'fps={self.output_frame_rate}'],
             }
+        else:
+            self.ffmpeg_output_opt = {
+                'gpu': ['-c:v', 'h264_nvenc', '-preset', self.preset, '-qp', str(self.crf_value)],
+                'cpu': ['-c:v', 'libx264', '-preset', self.preset, '-crf', str(self.crf_value)],
             }
+
         self.ffmpeg_global_opt = {
             'supress': ['-y', '-loglevel', 'quiet'],
             'show': ['-y'],
@@ -122,14 +152,18 @@ class VideoConverter(QMainWindow):
     def convert_video(self, input_file, output_file):
         if self.ffmpeg_dir is not None:
             # check settings
-            speed = self.quality_combo_box.currentText()
+            # speed = self.quality_combo_box.currentText()
             if self.use_gpu:
                 hw = 'gpu'
             else:
                 hw = 'cpu'
             input_cmd = self.ffmpeg_input_opt[hw]
-            output_cmd = self.ffmpeg_output_opt[hw][speed]
-
+            # output_cmd = self.ffmpeg_output_opt[hw][speed]
+            output_cmd = self.ffmpeg_output_opt[hw]
+            # print(input_cmd)
+            # print('')
+            # print(output_cmd)
+            # print('')
             if self.supress_terminal_output:
                 global_settings = self.ffmpeg_global_opt['supress']
             else:
@@ -179,6 +213,7 @@ class VideoConverter(QMainWindow):
 
     def start_converting(self):
         if self.input_file is not None and self.output_file is not None:
+            self._define_ffmpeg_settings()
             self.please_wait_status()
             QApplication.processEvents()
             self.convert_video(self.input_file, self.output_file)

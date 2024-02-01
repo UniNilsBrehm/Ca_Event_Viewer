@@ -1,10 +1,12 @@
 ,Value
-ffmpeg,
-sampling_dt,0.413
-stimulus_sampling_dt,0.016666667
-fbs_percentile,20
+ffmpeg,C:/FFmpegTool/bin/ffmpeg.exe
+sampling_rate,2.415
+sampling_dt,0.41407867494824013
+stimulus_sampling_rate,100
+stimulus_sampling_dt,0.01
+fbs_percentile,5
 default_dir,C:/
 filter_min,0
-filter_max,1000000
+filter_max,10000
 filter_interval,10
 filter_default,5000
