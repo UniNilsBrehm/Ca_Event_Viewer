@@ -1,8 +1,12 @@
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QFileDialog, QLabel, QCheckBox,\
     QComboBox, QApplication, QDoubleSpinBox
-# from IPython import embed
+from IPython import embed
 import ffmpy
+import os
+import subprocess
+import io
+import sys
 
 
 class VideoConverter(QMainWindow):
@@ -35,6 +39,9 @@ class VideoConverter(QMainWindow):
 
         self.start_button = QPushButton("Convert Video")
         self.start_button.clicked.connect(self.start_converting)
+
+        self.extract_frames_button = QPushButton("Extract Frames")
+        self.extract_frames_button.clicked.connect(self.start_extracting_frames)
 
         self.change_ffmpeg_dir_button = QPushButton("Set ffmpeg directory")
         self.change_ffmpeg_dir_button.clicked.connect(self.browse_file_ffmpeg)
@@ -101,13 +108,18 @@ class VideoConverter(QMainWindow):
         layout.addSpacing(20)
         layout.addWidget(self.start_button)
         layout.addSpacing(10)
+        layout.addWidget(self.extract_frames_button)
+        layout.addSpacing(10)
         layout.addWidget(self.status_label)
 
         # Set the central widget and window properties
         self.setCentralWidget(central_widget)
         self.setWindowTitle("Video Converter")
 
-        self.ffmpeg_dir = None
+        if self.settings.settings_file.loc['ffmpeg'].item() == 'NaN':
+            self.browse_file_ffmpeg()
+        self.ffmpeg_dir = self.settings.settings_file.loc['ffmpeg'].item()
+        self.ffmpeg_probe = f'{os.path.split(self.ffmpeg_dir)[0]}/ffprobe.exe'
         self._define_ffmpeg_settings()
 
     def _define_ffmpeg_settings(self):
@@ -125,11 +137,13 @@ class VideoConverter(QMainWindow):
             self.ffmpeg_output_opt = {
                 'gpu': ['-c:v', 'h264_nvenc', '-preset', self.preset, '-qp', str(self.crf_value), '-filter:v', f'fps={self.output_frame_rate}'],
                 'cpu': ['-c:v', 'libx264', '-preset', self.preset, '-crf', str(self.crf_value), '-filter:v', f'fps={self.output_frame_rate}'],
+                'avi': ['-an', '-vcodec', 'rawvideo', '-y']
             }
         else:
             self.ffmpeg_output_opt = {
                 'gpu': ['-c:v', 'h264_nvenc', '-preset', self.preset, '-qp', str(self.crf_value)],
                 'cpu': ['-c:v', 'libx264', '-preset', self.preset, '-crf', str(self.crf_value)],
+                'avi': ['-an', '-vcodec', 'rawvideo', '-y']
             }
 
         self.ffmpeg_global_opt = {
@@ -149,6 +163,67 @@ class VideoConverter(QMainWindow):
         else:
             self.supress_terminal_output = False
 
+    def get_video_info(self, filename):
+        result = subprocess.run([self.ffmpeg_probe, "-v", "error", "-select_streams", "v:0", "-show_entries",
+                                 "stream=duration:stream=avg_frame_rate", "-of",
+                                 "default=noprint_wrappers=1:nokey=1", filename],
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT)
+        output = result.stdout.decode("utf-8").split('\r\n')
+        frame_rate = float(output[0].split('/')[0])  # Extracting the first part before '/'
+        duration = float(output[1])
+
+        return frame_rate, duration
+
+    # def get_video_duration(self, filename):
+    #     # gets video duration in seconds using ffmpeg probe
+    #     result = subprocess.run([self.ffmpeg_probe, "-v", "error", "-show_entries",
+    #                              "format=duration", "-of",
+    #                              "default=noprint_wrappers=1:nokey=1", filename],
+    #                             stdout=subprocess.PIPE,
+    #                             stderr=subprocess.STDOUT)
+    #     return float(result.stdout)
+
+    def extract_frames(self, input_file, save_dir):
+        if self.ffmpeg_dir is not None:
+            # ffmpeg -i input.mp4 -vf fps=1 %04d.png
+            video_frame_rate, video_duration = self.get_video_info(input_file)
+
+            if self.output_frame_rate > 0:
+                output_cmd = ['-vf', f'fps={self.output_frame_rate}']
+                fr = self.output_frame_rate
+            else:
+                output_cmd = None
+                fr = video_frame_rate
+
+            number_of_frames = int(fr * video_duration)
+            print(f'++++ Expecting to Store {number_of_frames} Frames to HDD+++')
+            counter = len(str(number_of_frames)) + 1
+            output_dir = f'{save_dir}/%0{counter}d.jpg'
+            if self.supress_terminal_output:
+                global_settings = self.ffmpeg_global_opt['supress']
+            else:
+                global_settings = self.ffmpeg_global_opt['show']
+
+            ff = ffmpy.FFmpeg(
+                executable=self.ffmpeg_dir,
+                global_options=global_settings,
+                inputs={input_file: None},
+                outputs={output_dir: output_cmd}
+            )
+            ff.run()
+
+    def start_extracting_frames(self):
+        file_dir = str(QFileDialog.getExistingDirectory(self, "Select Directory"))
+        if self.input_file is not None and file_dir is not None:
+            print('START EXTRACTING')
+            # self._define_ffmpeg_settings()
+            self.output_frame_rate = int(self.change_frame_rate.value())
+            self.please_wait_status()
+            QApplication.processEvents()
+            self.extract_frames(self.input_file, file_dir)
+            self.finished_status()
+
     def convert_video(self, input_file, output_file):
         if self.ffmpeg_dir is not None:
             # check settings
@@ -157,13 +232,15 @@ class VideoConverter(QMainWindow):
                 hw = 'gpu'
             else:
                 hw = 'cpu'
-            input_cmd = self.ffmpeg_input_opt[hw]
-            # output_cmd = self.ffmpeg_output_opt[hw][speed]
-            output_cmd = self.ffmpeg_output_opt[hw]
-            # print(input_cmd)
-            # print('')
-            # print(output_cmd)
-            # print('')
+
+            if output_file[-3:] == 'avi':
+                # Use no compression for avi file (otherwise you can not open it in imagej)
+                input_cmd = self.ffmpeg_input_opt['cpu']
+                output_cmd = self.ffmpeg_output_opt['avi']
+            else:
+                input_cmd = self.ffmpeg_input_opt[hw]
+                output_cmd = self.ffmpeg_output_opt[hw]
+
             if self.supress_terminal_output:
                 global_settings = self.ffmpeg_global_opt['supress']
             else:
@@ -192,26 +269,37 @@ class VideoConverter(QMainWindow):
         self.status_label.setText('Converting finished!')
         self.browse_button.setDisabled(False)
         self.change_ffmpeg_dir_button.setDisabled(False)
+        if not self.supress_terminal_output:
+            print('')
+            print('++++ FINISHED ++++')
+            print('')
 
     def browse_files(self):
-        if self.settings.settings_file.loc['ffmpeg'].item() == 'NaN':
-            self.browse_file_ffmpeg()
-        self.ffmpeg_dir = self.settings.settings_file.loc['ffmpeg'].item()
+        # if self.settings.settings_file.loc['ffmpeg'].item() == 'NaN':
+        #     self.browse_file_ffmpeg()
+        # self.ffmpeg_dir = self.settings.settings_file.loc['ffmpeg'].item()
         # self.please_wait_status()
         input_file, _ = QFileDialog.getOpenFileName(
             self, "Select Input File", "", "Video Files (*.mp4; *.avi; *.mkv; *.mpeg; *.mpg)")
         if input_file:
             self.input_file = input_file
-            output_file, _ = QFileDialog.getSaveFileName(
-                self, "Select Output File", "", "MP4, (*.mp4);; AVI, (*.avi);; MKV, (*.mkv)")
-            if output_file:
-                self.output_file = output_file
-                self.input_file_label.setText(input_file)
-                self.output_file_label.setText(output_file)
-                # self.convert_video(input_file, output_file)
-                # self.finished_status()
+            self.input_file_label.setText(input_file)
+            # output_file, _ = QFileDialog.getSaveFileName(
+            #     self, "Select Output File", "", "MP4, (*.mp4);; AVI, (*.avi);; MKV, (*.mkv)")
+            # if output_file:
+            #     self.output_file = output_file
+            #     self.input_file_label.setText(input_file)
+            #     self.output_file_label.setText(output_file)
+            #     # self.convert_video(input_file, output_file)
+            #     # self.finished_status()
 
     def start_converting(self):
+        output_file, _ = QFileDialog.getSaveFileName(
+            self, "Select Output File", "", "MP4, (*.mp4);; AVI, (*.avi);; MKV, (*.mkv)")
+        if output_file:
+            self.output_file = output_file
+            self.output_file_label.setText(output_file)
+
         if self.input_file is not None and self.output_file is not None:
             self._define_ffmpeg_settings()
             self.please_wait_status()
