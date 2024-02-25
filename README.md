@@ -10,7 +10,7 @@ With the <i>CaEventViewer</i> you can plot and analyze calcium transients from C
 - Import and plot single stimulus traces for each ROI (e.g. stimulus voltage trace); Must have the same format as the ROI data traces
 - Import and plot one stimulus for all ROIs and label stimulus onsets
 - Save Figures (via right-click menu or via Toolbar)
-
+- Analyze individual Ca Transients to determine the rise and decay constants
 
 ## Installation
 Before running the "viewer.py" file you should make sure that you have installed all the needed dependencies.
@@ -86,10 +86,6 @@ A meta data file could look like this:
 |------------|------------|----------|------------|
 | 22.04.2023 | 19.04.2023 | abc:Gal4 | Ca-Imaging |
 
-## Compute Noise Statistics
-Via "File-->Compute Noise Statistics" you can export some statistics of the Noise in your data to a .csv file.
-It will look at all data values that are smaller than the 5th percentile and returns the mean and the standard deviation of it.
-
 ## Analysing Events
 By pressing the "Alt" ("command") Key you can enter the "event analyzer mode".
 
@@ -97,4 +93,4 @@ By pressing the "Alt" ("command") Key you can enter the "event analyzer mode".
 You can independently import a data trace (.csv) and a video (.mp4, .avi, .mkv) or tiff file
 
 ### ----------
-Nils Brehm - 2023
+Nils Brehm - 2024
