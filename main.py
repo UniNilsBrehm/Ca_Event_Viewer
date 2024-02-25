@@ -1,7 +1,7 @@
 import sys
 from PyQt6.QtWidgets import QApplication
-from gui import MainWindow
-from controller import Controller
+from viewer.gui import MainWindow
+from viewer.controller import Controller
 
 
 def main():

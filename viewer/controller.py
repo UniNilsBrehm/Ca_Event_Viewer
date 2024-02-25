@@ -1,22 +1,22 @@
 import os
 import time
-from time import perf_counter
 import pickle
-from zipfile import ZipFile
+import pyqtgraph as pg
+import pyqtgraph.exporters
 import numpy as np
 import pandas as pd
+from zipfile import ZipFile
 from PyQt6.QtGui import QShortcut, QKeySequence, QFont
 from PyQt6.QtWidgets import QInputDialog, QLineEdit, QMessageBox, QFileDialog, QProgressBar, QApplication
 from PyQt6.QtCore import pyqtSignal, QObject, Qt, QTimer, QThread
-from datahandler import DataHandler
-from pointcollectors import PointCollectionMode, TauCollectionMode
-from settings import PyqtgraphSettings, PlottingStyles, SettingsFile, SettingsMenu
-import pyqtgraph as pg
-import pyqtgraph.exporters
-from video_viewer import VideoViewer
-from video_converter import VideoConverter
-from multi_trace_plot import MultiPlotScrollArea
-from gui import ImportDataTracesWindow
+
+from viewer.datahandler import DataHandler
+from viewer.pointcollectors import PointCollectionMode, TauCollectionMode
+from viewer.settings import PyqtgraphSettings, PlottingStyles, SettingsFile, SettingsMenu
+from viewer.video_viewer import VideoViewer
+from viewer.video_converter import VideoConverter
+from viewer.multi_trace_plot import MultiPlotScrollArea
+from viewer.gui import ImportDataTracesWindow
 # from IPython import embed
 
 

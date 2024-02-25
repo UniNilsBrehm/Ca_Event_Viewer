@@ -3,7 +3,7 @@ from PyQt6.QtCore import pyqtSignal, Qt, QEvent
 from PyQt6.QtWidgets import QMainWindow, QPushButton, QWidget, QLabel, QVBoxLayout, \
     QMessageBox, QHBoxLayout, QSlider, QComboBox, QToolBar, QLineEdit, QFileDialog, QDialog
 import pyqtgraph as pg
-from settings import SettingsFile
+from viewer.settings import SettingsFile
 
 
 class ImportDataTracesWindow(QDialog):

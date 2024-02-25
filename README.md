@@ -2,12 +2,15 @@
 Welcome to the <i>CaEventViewer</i>.
 With the <i>CaEventViewer</i> you can plot and analyze calcium transients from Ca-imaging experiments.
 
-## New Features
+## Features
+- Import ROI based data from csv file
+- Normalize raw fluorescence (dF/F, z-scores) 
 - Video/Tiff Viewer that can connect the video to the ROI Data Trace to visualize what is happening!
 - Video File Converter based on FFMPEG and ffmpy
-- Import single stimulus traces for each ROI (e.g. stimulus voltage trace); Must have the same format as the ROI data traces
+- Import and plot single stimulus traces for each ROI (e.g. stimulus voltage trace); Must have the same format as the ROI data traces
+- Import and plot one stimulus for all ROIs and label stimulus onsets
 - Save Figures (via right-click menu or via Toolbar)
-- Fixed ROI Combo Box Bug
+
 
 ## Installation
 Before running the "viewer.py" file you should make sure that you have installed all the needed dependencies.

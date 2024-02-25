@@ -5,8 +5,6 @@ from IPython import embed
 import ffmpy
 import os
 import subprocess
-import io
-import sys
 
 
 class VideoConverter(QMainWindow):

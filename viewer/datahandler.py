@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import curve_fit
 from PyQt6.QtCore import pyqtSignal, QObject
-from settings import SettingsFile
+from viewer.settings import SettingsFile
 from IPython import embed
 """
 Data Structure:

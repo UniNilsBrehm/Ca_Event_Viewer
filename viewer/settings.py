@@ -43,10 +43,16 @@ class SettingsMenu(QMainWindow):
 
 class SettingsFile:
     def __init__(self):
-        f = os.listdir(os.getcwd())
+        f = os.listdir(os.getcwd() + '/viewer')
         if 'settings.csv' in f:
-            self.settings_file = pd.read_csv('settings.csv', index_col=0)
+            # print('++++ FOUND SETTINGS FILE ++++')
+            self.settings_file = pd.read_csv('viewer/settings.csv', header=None, index_col=0)
+            self.settings_file.columns = ['Value']
         else:
+            print('')
+            print('++++ COULD NOT FIND SETTINGS FILE ++++')
+            print('++++ WILL CREATE A NEW ONE ++++')
+            print('')
             self.settings_file = pd.DataFrame(columns=['Value'])
             self.settings_file.loc['ffmpeg'] = 'NaN'
             self.settings_file.loc['sampling_rate'] = 10
@@ -62,22 +68,11 @@ class SettingsFile:
             self.settings_file.loc['filter_interval'] = 10
             self.settings_file.loc['filter_default'] = 5 * 1000
 
-            self.settings_file.to_csv('settings.csv')
-
-            # self.settings_file = dict()
-            # self.settings_file['ffmpeg'] = ['NaN']
-            # self.settings_file['sampling_dt'] = [0.002]
-            # self.settings_file['stimulus_sampling_dt'] = [0.01666666666666]
-
-            # Convert to pandas data frame
-            # self.settings_file = pd.DataFrame.from_dict(self.settings_file).transpose()
-            # self.settings_file.columns = ['Value']
-            # self.settings_file.to_csv('settings.csv')
-
-        # self.default_dir = Path(self.settings_file.loc['default_dir'])
+            # self.settings_file.to_csv('viewer/settings.csv')
+            self.save_settings()
 
     def save_settings(self):
-        self.settings_file.to_csv('settings.csv')
+        self.settings_file.to_csv('viewer/settings.csv')
 
     def modify_setting(self, index_name, value):
         self.settings_file.loc[index_name] = value
@@ -88,14 +83,6 @@ class SettingsFile:
         else:
             out = self.settings_file.loc[key_name].item()
         return out
-
-
-# class Settings:
-#     default_dir = Path('C:/')
-#     # default_dir = Path('/home/leo/Nextcloud/Bio_B.Sc/6.Semester/Bachelorarbeit/')
-#     sampling_dt = 0.05
-#     sampling_rate = 1 / sampling_dt
-#     fbs_percentile = 5
 
 
 class PyqtgraphSettings:

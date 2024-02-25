@@ -1,12 +1,12 @@
-import os
+# import os
 import cv2
 import tifffile
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QUrl
 from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSlider, QPushButton, QFileDialog
-from PyQt6.QtMultimedia import QMediaPlayer
-from PyQt6.QtMultimediaWidgets import QVideoWidget
+# from PyQt6.QtMultimedia import QMediaPlayer
+# from PyQt6.QtMultimediaWidgets import QVideoWidget
 from pyqtgraph import ImageView
-import subprocess as sp
+# import subprocess as sp
 import numpy as np
 # from IPython import embed
 

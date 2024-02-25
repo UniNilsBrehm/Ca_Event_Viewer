@@ -1,6 +1,6 @@
 import numpy as np
 from PyQt6.QtCore import pyqtSignal, QObject, Qt
-from settings import PlottingStyles
+from viewer.settings import PlottingStyles
 import pyqtgraph as pg
 
 

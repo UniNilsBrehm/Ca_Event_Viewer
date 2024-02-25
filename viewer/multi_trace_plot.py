@@ -3,7 +3,6 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QScrollArea, QLabel, QProgressBar
 import pyqtgraph as pg
 import numpy as np
-from time import perf_counter
 
 
 class MultiPlotScrollArea(QMainWindow):
