@@ -5,6 +5,10 @@ from IPython import embed
 import ffmpy
 import os
 import subprocess
+import cv2
+from tifffile import imwrite
+from concurrent.futures import ThreadPoolExecutor
+import math
 
 
 class VideoConverter(QMainWindow):
@@ -40,6 +44,9 @@ class VideoConverter(QMainWindow):
 
         self.extract_frames_button = QPushButton("Extract Frames")
         self.extract_frames_button.clicked.connect(self.start_extracting_frames)
+
+        self.rescale_button = QPushButton("Rescale Video")
+        self.rescale_button.clicked.connect(self.rescale_video)
 
         self.change_ffmpeg_dir_button = QPushButton("Set ffmpeg directory")
         self.change_ffmpeg_dir_button.clicked.connect(self.browse_file_ffmpeg)
@@ -108,6 +115,8 @@ class VideoConverter(QMainWindow):
         layout.addSpacing(10)
         layout.addWidget(self.extract_frames_button)
         layout.addSpacing(10)
+        layout.addWidget(self.rescale_button)
+        layout.addSpacing(10)
         layout.addWidget(self.status_label)
 
         # Set the central widget and window properties
@@ -119,6 +128,73 @@ class VideoConverter(QMainWindow):
         self.ffmpeg_dir = self.settings.settings_file.loc['ffmpeg'].item()
         self.ffmpeg_probe = f'{os.path.split(self.ffmpeg_dir)[0]}/ffprobe.exe'
         self._define_ffmpeg_settings()
+
+    def convert_to_tiff_stack(self):
+        input_video = self.input_file
+        output_tiff = self.output_file
+        chunk_size = 300
+
+        cap = cv2.VideoCapture(input_video)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        num_chunks = math.ceil(total_frames / chunk_size)
+
+        for chunk_idx, start_frame in enumerate(range(0, total_frames, chunk_size)):
+            frames = []
+            cap_chunk = cv2.VideoCapture(input_video)
+            cap_chunk.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+            for _ in range(chunk_size):
+                ret, frame = cap_chunk.read()
+                if ret:
+                    frames.append(frame)
+                else:
+                    break
+
+            imwrite(output_tiff, frames, append=True, bigtiff=True, compression='deflate')
+            print(f"Processed chunk {chunk_idx + 1}/{num_chunks}", end='\r')
+
+            cap_chunk.release()  # Release the video capture object
+
+        cap.release()  # Release the main video capture object
+
+    def convert_to_tiff_stack2(self):
+        input_video = self.input_file
+        output_tiff = self.output_file
+        chunk_size = 300
+        cap = cv2.VideoCapture(input_video)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+        for start_frame in range(0, total_frames, chunk_size):
+            end_frame = min(start_frame + chunk_size, total_frames)
+            frames = []
+
+            for i in range(start_frame, end_frame):
+                cap.set(cv2.CAP_PROP_POS_FRAMES, i)
+                ret, frame = cap.read()
+                if ret:
+                    frames.append(frame)
+                else:
+                    break
+
+            imwrite(output_tiff, frames, append=True, bigtiff=True, compression='lzw')
+            print(f'{end_frame} of {total_frames} Frames', end='\r')
+
+        cap.release()
+
+    def rescale_video(self):
+        self._define_ffmpeg_settings()
+        output_file = os.path.split(self.input_file)[0] + f'/rescaled.{self.input_file[-3:]}'
+        self.get_supress_state()
+        if self.supress_terminal_output:
+            global_settings = self.ffmpeg_global_opt['supress']
+        else:
+            global_settings = self.ffmpeg_global_opt['show']
+        ff = ffmpy.FFmpeg(
+            executable=self.ffmpeg_dir,
+            global_options=global_settings,
+            inputs={self.input_file: None},
+            outputs={output_file: ['-vf', 'scale=640:480']}
+        )
+        ff.run()
 
     def _define_ffmpeg_settings(self):
         self.ffmpeg_input_opt = {'gpu': ['-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda'], 'cpu': None}
@@ -135,13 +211,13 @@ class VideoConverter(QMainWindow):
             self.ffmpeg_output_opt = {
                 'gpu': ['-c:v', 'h264_nvenc', '-preset', self.preset, '-qp', str(self.crf_value), '-filter:v', f'fps={self.output_frame_rate}'],
                 'cpu': ['-c:v', 'libx264', '-preset', self.preset, '-crf', str(self.crf_value), '-filter:v', f'fps={self.output_frame_rate}'],
-                'avi': ['-an', '-vcodec', 'rawvideo', '-y']
+                'avi': ['-an', '-vcodec', 'rawvideo', '-y'],
             }
         else:
             self.ffmpeg_output_opt = {
                 'gpu': ['-c:v', 'h264_nvenc', '-preset', self.preset, '-qp', str(self.crf_value)],
                 'cpu': ['-c:v', 'libx264', '-preset', self.preset, '-crf', str(self.crf_value)],
-                'avi': ['-an', '-vcodec', 'rawvideo', '-y']
+                'avi': ['-an', '-vcodec', 'rawvideo', '-y'],
             }
 
         self.ffmpeg_global_opt = {
@@ -172,15 +248,6 @@ class VideoConverter(QMainWindow):
         duration = float(output[1])
 
         return frame_rate, duration
-
-    # def get_video_duration(self, filename):
-    #     # gets video duration in seconds using ffmpeg probe
-    #     result = subprocess.run([self.ffmpeg_probe, "-v", "error", "-show_entries",
-    #                              "format=duration", "-of",
-    #                              "default=noprint_wrappers=1:nokey=1", filename],
-    #                             stdout=subprocess.PIPE,
-    #                             stderr=subprocess.STDOUT)
-    #     return float(result.stdout)
 
     def extract_frames(self, input_file, save_dir):
         if self.ffmpeg_dir is not None:
@@ -224,33 +291,36 @@ class VideoConverter(QMainWindow):
 
     def convert_video(self, input_file, output_file):
         if self.ffmpeg_dir is not None:
-            # check settings
-            # speed = self.quality_combo_box.currentText()
-            if self.use_gpu:
-                hw = 'gpu'
+            if output_file[-3:] == 'tif':
+                print('CONVERT TO TIFF')
+                self.convert_to_tiff_stack()
             else:
-                hw = 'cpu'
+                # check settings
+                if self.use_gpu:
+                    hw = 'gpu'
+                else:
+                    hw = 'cpu'
 
-            if output_file[-3:] == 'avi':
-                # Use no compression for avi file (otherwise you can not open it in imagej)
-                input_cmd = self.ffmpeg_input_opt['cpu']
-                output_cmd = self.ffmpeg_output_opt['avi']
-            else:
-                input_cmd = self.ffmpeg_input_opt[hw]
-                output_cmd = self.ffmpeg_output_opt[hw]
+                if output_file[-3:] == 'avi':
+                    # Use no compression for avi file (otherwise you can not open it in imagej)
+                    input_cmd = self.ffmpeg_input_opt['cpu']
+                    output_cmd = self.ffmpeg_output_opt['avi']
+                else:
+                    input_cmd = self.ffmpeg_input_opt[hw]
+                    output_cmd = self.ffmpeg_output_opt[hw]
 
-            if self.supress_terminal_output:
-                global_settings = self.ffmpeg_global_opt['supress']
-            else:
-                global_settings = self.ffmpeg_global_opt['show']
+                if self.supress_terminal_output:
+                    global_settings = self.ffmpeg_global_opt['supress']
+                else:
+                    global_settings = self.ffmpeg_global_opt['show']
 
-            ff = ffmpy.FFmpeg(
-                executable=self.ffmpeg_dir,
-                global_options=global_settings,
-                inputs={input_file: input_cmd},
-                outputs={output_file: output_cmd}
-            )
-            ff.run()
+                ff = ffmpy.FFmpeg(
+                    executable=self.ffmpeg_dir,
+                    global_options=global_settings,
+                    inputs={input_file: input_cmd},
+                    outputs={output_file: output_cmd}
+                )
+                ff.run()
 
     def browse_file_ffmpeg(self):
         self.ffmpeg_dir, _ = QFileDialog.getOpenFileName(self, "Select FFMPEG .exe", "", "ffmpeg (*.exe)")
@@ -273,27 +343,15 @@ class VideoConverter(QMainWindow):
             print('')
 
     def browse_files(self):
-        # if self.settings.settings_file.loc['ffmpeg'].item() == 'NaN':
-        #     self.browse_file_ffmpeg()
-        # self.ffmpeg_dir = self.settings.settings_file.loc['ffmpeg'].item()
-        # self.please_wait_status()
         input_file, _ = QFileDialog.getOpenFileName(
             self, "Select Input File", "", "Video Files (*.mp4; *.avi; *.mkv; *.mpeg; *.mpg)")
         if input_file:
             self.input_file = input_file
             self.input_file_label.setText(input_file)
-            # output_file, _ = QFileDialog.getSaveFileName(
-            #     self, "Select Output File", "", "MP4, (*.mp4);; AVI, (*.avi);; MKV, (*.mkv)")
-            # if output_file:
-            #     self.output_file = output_file
-            #     self.input_file_label.setText(input_file)
-            #     self.output_file_label.setText(output_file)
-            #     # self.convert_video(input_file, output_file)
-            #     # self.finished_status()
 
     def start_converting(self):
         output_file, _ = QFileDialog.getSaveFileName(
-            self, "Select Output File", "", "MP4, (*.mp4);; AVI, (*.avi);; MKV, (*.mkv)")
+            self, "Select Output File", "", "MP4, (*.mp4);; AVI, (*.avi);; MKV, (*.mkv);; TIF, (*.tif)")
         if output_file:
             self.output_file = output_file
             self.output_file_label.setText(output_file)
